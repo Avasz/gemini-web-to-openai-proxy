@@ -51,10 +51,10 @@ Feature is built and unit-tested. Open questions from live use:
 Until this settles, treat warm sessions as experimental. The stateless endpoints
 are the solid path; sessions are strictly opt-in and don't affect them.
 
-## Docker image (SRS 3)
+## ~~Docker image (SRS 3)~~ — done in Phase 11
 
-A `Dockerfile` + `docker-compose.yml` with `data_dir` (cookie cache, activity.db,
-admin_credential) mounted as a volume. Not started.
+`Dockerfile` + `docker-compose.yml` + `docs/DEPLOYMENT.md`, `/data` volume for the
+rotated-cookie cache / activity.db / admin_credential. Built and smoke-tested.
 
 ## Admin dashboard UI (Phase 8)
 
