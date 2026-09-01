@@ -3,103 +3,220 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>gemini-openai-proxy · admin</title>
+<title>Admin · gemini-openai-proxy</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/static/dashboard.css">
 </head>
 <body>
+
+<div class="mobile-bar">
+  <div class="mobile-brand"><div class="mobile-logo">G</div>gemini-openai-proxy</div>
+  <button class="theme-btn" id="theme-mobile" aria-label="Toggle theme">
+    <svg class="icon-dark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4.93 4.93l1.41 1.41m11.32 11.32 1.41 1.41M2 12h2m16 0h2M4.93 19.07l1.41-1.41m11.32-11.32 1.41-1.41"/></svg>
+    <svg class="icon-light" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 12.79A9 9 0 1 1 11.21 3a7 7 0 0 0 9.79 9.79z"/></svg>
+  </button>
+</div>
+
 <div class="shell">
   <aside class="sidebar">
-    <div class="brand">
-      <div class="logo">G</div>
-      <div>
-        <div class="brand-name">gemini&#8288;-openai&#8288;-proxy</div>
-        <div class="brand-sub" id="version">v–</div>
-      </div>
+    <div class="sidebar-brand">
+      <div class="sidebar-logo">G</div>
+      <span class="sidebar-title">gemini-openai-proxy</span>
+      <span class="sidebar-version" id="version">v–</span>
     </div>
-    <nav>
-      <a href="#overview" class="nav-item active">Overview</a>
-      <a href="#activity" class="nav-item">Activity</a>
-      <a href="#models" class="nav-item">Models</a>
-      <button class="nav-item" id="open-import">Import cookies</button>
+
+    <nav class="sidebar-nav">
+      <div class="sidebar-nav-label">Monitor</div>
+      <a href="#" class="nav-item active">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+        Overview
+      </a>
+      <a href="#activity-section" class="nav-item">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+        Activity
+      </a>
+      <a href="#model-section" class="nav-item">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 2 2 7l10 5 10-5-10-5z"/><path d="m2 17 10 5 10-5"/><path d="m2 12 10 5 10-5"/></svg>
+        Models
+      </a>
     </nav>
-    <div class="sidebar-foot">
-      <div class="meta">uptime <span id="uptime">–</span></div>
-      <div class="meta">refresh in <span id="countdown">30</span>s</div>
-      <button class="ghost" id="theme-toggle">Toggle theme</button>
+
+    <nav class="sidebar-nav">
+      <div class="sidebar-nav-label">Manage</div>
+      <button class="nav-item" id="open-import-side">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M4 19h16"/></svg>
+        Import Cookies
+      </button>
+    </nav>
+
+    <div class="sidebar-bottom">
+      <div class="sidebar-meta">Uptime <span id="uptime">–</span></div>
+      <button class="nav-item" id="theme-side">
+        <svg class="icon-dark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4.93 4.93l1.41 1.41m11.32 11.32 1.41 1.41M2 12h2m16 0h2M4.93 19.07l1.41-1.41m11.32-11.32 1.41-1.41"/></svg>
+        <svg class="icon-light" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 12.79A9 9 0 1 1 11.21 3a7 7 0 0 0 9.79 9.79z"/></svg>
+        Toggle theme
+      </button>
     </div>
   </aside>
 
-  <main class="main">
-    <header class="page-head">
-      <h1>Dashboard</h1>
-      <span class="tier" id="tier" hidden></span>
+  <div class="main">
+    <header class="page-header">
+      <h1 class="page-title">Dashboard</h1>
+      <div class="header-actions"><span class="badge badge-accent" id="tier" hidden>PRO</span></div>
     </header>
 
     <section class="banner" id="banner" data-status="unknown">
-      <div class="banner-dot"></div>
-      <div><strong id="banner-title">Loading…</strong><span id="banner-text"></span></div>
+      <div class="banner-icon">
+        <svg id="banner-ok" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+        <svg id="banner-bad" hidden viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/></svg>
+      </div>
+      <div class="banner-text"><h2 id="banner-title">Loading…</h2><p id="banner-text"></p></div>
     </section>
 
-    <div id="overview" class="grid">
-      <section class="card">
-        <h2>Account &amp; auth</h2>
-        <dl class="kv">
-          <dt>Overall</dt><dd><span class="pill" id="s-overall">–</span></dd>
-          <dt>Page reachable</dt><dd><span class="pill" id="s-page">–</span></dd>
-          <dt>Client authenticated</dt><dd><span class="pill" id="s-auth">–</span></dd>
-          <dt>Account status</dt><dd><span class="pill" id="s-acct">–</span></dd>
-          <dt>Cookie mode</dt><dd id="s-mode" class="mono">–</dd>
-          <dt>Cookie source</dt><dd id="s-source" class="mono">–</dd>
-          <dt>Init error</dt><dd id="s-error" class="mono dim">–</dd>
-        </dl>
-      </section>
+    <div class="sections">
 
-      <section class="card">
-        <h2>Capacity</h2>
-        <dl class="kv">
-          <dt>Concurrency limit</dt><dd id="c-limit" class="mono">–</dd>
-          <dt>In flight</dt><dd id="c-inflight" class="mono">–</dd>
-          <dt>Waiting for a slot</dt><dd id="c-waiting" class="mono">–</dd>
-          <dt>Rejected (503) total</dt><dd id="c-rejected" class="mono">–</dd>
-          <dt>Warm sessions</dt><dd id="c-warm" class="mono">–</dd>
-        </dl>
-      </section>
-
-      <section class="card wide" id="usage-card" hidden>
-        <h2>Quota &amp; usage</h2>
+      <section class="card" id="usage-card" hidden>
+        <div class="card-head">
+          <span class="card-label">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+            Quota &amp; Usage
+          </span>
+          <span class="badge badge-accent" id="usage-tier" hidden>PRO</span>
+        </div>
         <div id="usage-body"></div>
       </section>
 
-      <section class="card wide" id="activity">
-        <h2>Activity <span class="dim">· last 24h</span></h2>
-        <div class="metrics">
-          <div class="metric"><b id="a-total">–</b><span>requests</span></div>
-          <div class="metric"><b id="a-errors">–</b><span>errors</span><small id="a-rate"></small></div>
-          <div class="metric"><b id="a-latency">–</b><span>avg latency</span></div>
-          <div class="metric"><b id="a-last">–</b><span>since last</span></div>
-        </div>
-        <div class="chips" id="a-bymodel"></div>
-      </section>
+      <div class="row-2">
+        <section class="card" id="auth-section">
+          <div class="card-head">
+            <span class="card-label">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+              Account &amp; Auth
+            </span>
+            <span class="pill" id="auth-pill">–</span>
+            <button class="btn-import" id="open-import-auth">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M4 19h16"/></svg>
+              Import Cookies
+            </button>
+          </div>
+          <div class="card-body">
+            <div class="kv-grid">
+              <div class="kv"><span class="kv-key">Auth Mode</span><span class="kv-val"><span class="pill" id="s-mode">–</span></span></div>
+              <div class="kv"><span class="kv-key">Client Auth</span><span class="kv-val"><span class="pill" id="s-auth">–</span></span></div>
+              <div class="kv"><span class="kv-key">Client Init</span><span class="kv-val"><span class="pill" id="s-init">–</span></span></div>
+              <div class="kv"><span class="kv-key">Account Status</span><span class="kv-val"><span class="pill" id="s-acct">–</span></span></div>
+              <div class="kv"><span class="kv-key">Page Reachable</span><span class="kv-val"><span class="pill" id="s-page">–</span></span></div>
+              <div class="kv"><span class="kv-key">Cookie Source</span><span class="kv-val mono" id="s-source">–</span></div>
+            </div>
+            <div class="kv-grid cols-1" style="margin-top:-1px;">
+              <div class="kv" style="border-bottom:none;"><span class="kv-key">Detail</span>
+                <span class="kv-val" id="s-detail" style="font-size:12px;font-weight:400;color:var(--fg-dim);">–</span></div>
+            </div>
+          </div>
+        </section>
 
-      <section class="card wide" id="models">
-        <h2>Models</h2>
-        <div class="chips" id="model-list"><span class="dim">–</span></div>
-      </section>
+        <section class="card" id="model-section">
+          <div class="card-head">
+            <span class="card-label">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 2 2 7l10 5 10-5-10-5z"/><path d="m2 17 10 5 10-5"/><path d="m2 12 10 5 10-5"/></svg>
+              Models
+            </span>
+          </div>
+          <div class="card-body">
+            <div class="kv-grid cols-1">
+              <div class="kv"><span class="kv-key">Default Model</span><span class="kv-val mono" id="m-default">–</span></div>
+              <div class="kv"><span class="kv-key">Account Tier</span><span class="kv-val" id="m-tier"><span class="kv-dim">unknown</span></span></div>
+              <div class="kv"><span class="kv-key">API Keys</span><span class="kv-val mono" id="m-keys">–</span></div>
+              <div class="kv" style="border-bottom:none;flex-direction:column;gap:8px;align-items:stretch;">
+                <span class="kv-key">Available Models</span>
+                <div class="tags" id="m-list"><span class="kv-dim">–</span></div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <div class="row-2" id="activity-section">
+        <section class="card">
+          <div class="card-head">
+            <span class="card-label">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+              Activity
+            </span>
+            <span class="badge badge-muted">Last 24 Hours</span>
+          </div>
+          <div class="metrics" style="grid-template-columns:repeat(2,1fr);">
+            <div class="metric"><div class="metric-num" id="a-total">–</div><div class="metric-label">Requests</div></div>
+            <div class="metric" style="border-right:none;"><div class="metric-num" id="a-errors">–</div><div class="metric-label">Errors</div><div class="metric-sub" id="a-rate"></div></div>
+            <div class="metric"><div class="metric-num" id="a-latency">–</div><div class="metric-label">Avg Latency</div></div>
+            <div class="metric" style="border-right:none;"><div class="metric-num" id="a-last">–</div><div class="metric-label">Last Request</div></div>
+          </div>
+          <div class="breakdown"><span class="breakdown-label">By Model</span><span id="a-bymodel"></span></div>
+        </section>
+
+        <section class="card">
+          <div class="card-head">
+            <span class="card-label">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+              Warm Sessions &amp; Inbox
+            </span>
+          </div>
+          <div class="card-body">
+            <div class="kv-grid cols-1">
+              <div class="kv"><span class="kv-key">Active Warm Sessions</span><span class="kv-val"><span class="pill" id="w-count">–</span></span></div>
+              <div class="kv"><span class="kv-key">Concurrency In Flight</span><span class="kv-val mono" id="w-inflight">–</span></div>
+              <div class="kv"><span class="kv-key">Session Idle Timeout</span><span class="kv-val mono" id="w-idle">–</span></div>
+              <div class="kv"><span class="kv-key">Cookie Inbox Path</span><span class="kv-val mono" id="w-inbox" style="font-size:11px;">–</span></div>
+              <div class="kv" style="border-bottom:none;"><span class="kv-key">Last Inbox Import</span><span class="kv-val mono" id="w-lastimport" style="color:var(--muted);">Never</span></div>
+            </div>
+          </div>
+        </section>
+      </div>
+
     </div>
-    <p class="foot"><a href="/status">/status →</a> · <a href="/docs">/docs →</a></p>
-  </main>
+  </div>
 </div>
 
-<div class="modal" id="import-modal" hidden>
-  <div class="modal-box">
-    <div class="modal-head"><strong>Import cookies</strong><button id="close-import" class="ghost">✕</button></div>
-    <p class="dim">Paste a cookie export — a JSON array of <code>{name, value}</code> objects, a
-      <code>{"cookie": "…"}</code> object, or a raw <code>name=value; …</code> string. Export the whole
-      <code>google.com</code> set. Applied immediately; the client is rebuilt with no restart.</p>
-    <textarea id="cookie-text" spellcheck="false" placeholder='[{"name": "__Secure-1PSID", "value": "…"}, …]'></textarea>
-    <div class="modal-actions">
-      <span id="import-result"></span>
-      <button id="submit-import" class="primary">Apply</button>
+<footer class="dash-foot">
+  <div class="refresh-bar-wrap">
+    <span>Auto-refreshes every 30s</span>
+    <div class="refresh-track"><div class="refresh-fill" id="refresh-fill"></div></div>
+    <span class="pause-notice" id="pause-notice">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+      paused while editing
+    </span>
+  </div>
+  <div><a href="/status">/status →</a> &nbsp;·&nbsp; <a href="/docs">/docs →</a></div>
+</footer>
+
+<div class="modal-overlay" id="modal">
+  <div class="modal" role="dialog" aria-modal="true">
+    <div class="modal-head">
+      <span class="modal-title">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M4 19h16"/></svg>
+        Import Cookies
+      </span>
+      <button class="modal-close" id="close-import" aria-label="Close">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="import-ctx">
+      <div><div class="import-ctx-label">Cookie Inbox Path</div><div class="import-ctx-val" id="ctx-path">–</div></div>
+      <div><div class="import-ctx-label">Last Inbox Import</div><div class="import-ctx-val" id="ctx-last">Never</div></div>
+    </div>
+    <div class="import-result" id="import-result"></div>
+    <p class="import-hint">Paste a cookie export — a JSON array of <code>{name, value}</code> objects
+      (from a browser cookie-export extension), a <code>{"cookie": "…"}</code> object, or a raw
+      <code>name=value; …</code> string. Export the whole <code>google.com</code> set. Applied
+      immediately; the client is torn down and rebuilt, no restart.</p>
+    <div class="import-form">
+      <textarea class="import-textarea" id="cookie-textarea" spellcheck="false" placeholder='[{"name": "__Secure-1PSID", "value": "…"}, …]'></textarea>
+      <div class="import-actions">
+        <span class="pause-notice" style="opacity:1;"></span>
+        <button class="btn-primary" id="submit-import">Import</button>
+      </div>
     </div>
   </div>
 </div>

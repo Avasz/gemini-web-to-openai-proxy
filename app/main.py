@@ -98,6 +98,7 @@ def create_app(config: Config | None = None) -> FastAPI:
     app.state.activity = activity
     app.state.admin_credential = admin_credential
     app.state.warm_sessions = warm_sessions
+    app.state.cookie_watcher = cookie_watcher
     app.state.started_at = time.time()
 
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")

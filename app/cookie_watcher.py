@@ -34,6 +34,9 @@ class CookieWatcher:
         self._task: asyncio.Task | None = None
         self._last_psid = self._store.load().get("__Secure-1PSID", "")
         self._last_watch_sig: tuple[float, int] | None = None
+        self.watch_file_path = str(self._watch_file) if self._watch_file else None
+        self.last_mirror_at: float | None = None
+        self.last_mirror_count: int | None = None
 
     async def start(self) -> None:
         if self._interval <= 0 or self._store.path is None:
@@ -88,5 +91,9 @@ class CookieWatcher:
             json.dumps([{"name": k, "value": v} for k, v in parsed.items()], indent=2),
             encoding="utf-8",
         )
+        import time as _t
+
+        self.last_mirror_at = _t.time()
+        self.last_mirror_count = len(parsed)
         logger.info("Mirrored %d cookies from %s into %s",
                     len(parsed), self._watch_file, target)

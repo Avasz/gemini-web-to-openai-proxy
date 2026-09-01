@@ -24,9 +24,11 @@ async def build_full_status(app) -> dict[str, Any]:
     except Exception:  # noqa: BLE001 - the detail is in health / snapshot
         pass
 
+    cfg = state.config
     client = gemini._client  # noqa: SLF001
     models: list[dict[str, Any]] = []
     usage: dict[str, Any] | None = None
+    default_model = getattr(cfg, "default_model", None)
     if client is not None:
         try:
             models = [
@@ -40,6 +42,11 @@ async def build_full_status(app) -> dict[str, Any]:
         except Exception:  # noqa: BLE001
             pass
         try:
+            if default_model:
+                default_model = client.resolve_model(default_model).display_name
+        except Exception:  # noqa: BLE001
+            pass
+        try:
             usage = client.usage_info or None
             if usage is None and client.quotas:
                 usage = {"quotas": client.quotas}
@@ -49,12 +56,21 @@ async def build_full_status(app) -> dict[str, Any]:
     warm = getattr(state, "warm_sessions", None)
     warm_block = None
     if warm is not None:
-        cfg = state.config
         warm_block = {
             "active": len(warm.list()),
             "idle_timeout": float(getattr(cfg, "warm_session_idle_timeout", 900.0)),
             "max": int(getattr(cfg, "max_warm_sessions", 20)),
         }
+
+    watcher = getattr(state, "cookie_watcher", None)
+    inbox = {
+        "path": (
+            getattr(watcher, "watch_file_path", None)
+            or (str(state.cookie_store.path) if state.cookie_store.path else None)
+        ),
+        "last_import_at": getattr(watcher, "last_mirror_at", None) if watcher else None,
+        "last_import_count": getattr(watcher, "last_mirror_count", None) if watcher else None,
+    }
 
     started = getattr(state, "started_at", None)
     return {
@@ -63,6 +79,9 @@ async def build_full_status(app) -> dict[str, Any]:
             str(state.config.source_path) if state.config.source_path else "defaults"
         ),
         "uptime_seconds": round(time.time() - started) if started else None,
+        "default_model": default_model,
+        "api_keys_required": bool(getattr(cfg, "api_keys", []) or []),
+        "temporary_chat_default": bool(getattr(cfg, "temporary_chat_default", False)),
         "health": await build_health(gemini, activity),
         "gemini": await gemini.status_snapshot(),
         "capacity": gemini.gate.stats() if gemini.gate else None,
@@ -70,4 +89,5 @@ async def build_full_status(app) -> dict[str, Any]:
         "models": models,
         "usage": usage,
         "warm_sessions": warm_block,
+        "cookie_inbox": inbox,
     }
