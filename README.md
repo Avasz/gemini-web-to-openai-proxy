@@ -45,6 +45,7 @@ implementation built on top of `gemini_webapi`.
 | Area | |
 |---|---|
 | **Authenticated account** | runs as your own Google account's Gemini session, using your browser's session cookies, no Google API key, no billing account. Sign in by adding your cookies; see [Cookie file](#cookie-file) for how. Without cookies configured, it still runs, just on Gemini's free anonymous tier. |
+| **API access control** | optionally lock down `/v1/*` and `/v1beta/*` behind your own API key(s); open by default (with a startup warning) if you don't set any. Separate entirely from the admin credential. See [Authentication](#authentication) below. |
 | **Models** | live per-account list, fetched from `GET /v1/models` (or `GET /v1beta/models` on the Google-native side); `-high` suffix → extended thinking; unknown model → 4xx with the real list, never a silent swap |
 | **OpenAI** | `/v1/chat/completions` + `/v1/responses` (independent surfaces), streaming, multimodal in/out, prompt-engineered tool calling |
 | **Google-native** | `/v1beta` model list + `generateContent` + `streamGenerateContent` (`?alt=sse` or JSON array) |
@@ -208,6 +209,37 @@ at `/docs` (Swagger UI) and `/redoc` once the service is running.
 ---
 
 ## Configuration
+
+### Authentication
+
+By default, anyone who can reach this service can use it, no key required.
+That's fine for local/personal use on a machine only you can reach, but if
+you're exposing this beyond localhost, you'll want to lock it down.
+
+Set `api_keys` in `config.json` to a list of one or more strings:
+
+```json
+{ "api_keys": ["sk-local-abc123"] }
+```
+
+Once set, every `/v1/*` and `/v1beta/*` request must include one of those
+keys, checked in this order (first one present wins):
+
+| Form | Example |
+|---|---|
+| Bearer token | `Authorization: Bearer sk-local-abc123` |
+| `x-api-key` header | `x-api-key: sk-local-abc123` |
+| `x-goog-api-key` header | `x-goog-api-key: sk-local-abc123` |
+| query parameter | `?key=sk-local-abc123` |
+
+A missing or wrong key gets a `401`. `GET /healthz` and `GET /status` never
+need a key, they only expose health signals, not generation access.
+
+**This is a separate system from the admin dashboard's credential.** A
+generation API key grants no admin access, and the admin password grants no
+generation access, see [Admin dashboard: username and password](#admin-dashboard-username-and-password).
+Full detail, including error response shapes, lives in
+[`docs/API.md`](docs/API.md#authentication).
 
 ### Config file discovery
 
