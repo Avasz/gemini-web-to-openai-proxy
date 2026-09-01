@@ -29,14 +29,27 @@ Ideas not yet tried:
 Tool calling *does* work end-to-end when the model emits the syntax (covered by
 tests with a canned reply); this is purely a compliance-rate problem.
 
-## Warm-session latency benefit unverified (Phase 10)
+## Warm sessions need more real-world testing (Phase 10)
 
-SRS 2.11 says to measure the cold-vs-warm latency delta before *and* after
-building the feature. The feature is built and correct, but the benchmark hasn't
-been run (the Gemini account was too fragile during development to run repeatable
-timing). Before relying on warm sessions for a latency win, measure: same prompt
-as (a) a fresh `/v1/chat/completions` call vs (b) a follow-up turn on a
-`POST /v1/sessions` session, several times each.
+Feature is built and unit-tested. Open questions from live use:
+
+- **Priming refusals.** A bare-declarative `priming_message` (e.g. "You are
+  helping me plan a trip.") is often bounced by Gemini Web with "I'm having a
+  hard time fulfilling your request." Use a real conversational opener with a
+  question. Consider: detect a refusal in the priming turn and fail
+  `POST /v1/sessions` with a clear error instead of returning a session backed by
+  a broken exchange.
+- **Continuation reliability.** Follow-up turns through a session have
+  intermittently returned Gemini's generic "I encountered an error" — needs more
+  runs to tell apart transient flakiness vs. a real continuation bug (was worse
+  before the `for_session` / `model=None` fix; retest).
+- **Latency benefit unbenchmarked** (SRS 2.11 asks for before/after numbers):
+  same prompt as (a) a fresh `/v1/chat/completions` vs (b) a follow-up on a
+  session, several times each. The account was too fragile during dev for
+  repeatable timing.
+
+Until this settles, treat warm sessions as experimental. The stateless endpoints
+are the solid path; sessions are strictly opt-in and don't affect them.
 
 ## Docker image (SRS 3)
 

@@ -121,7 +121,48 @@ class Config:
         return (base / p).resolve()
 
 
+def _coerce(raw: str, current: Any) -> Any:
+    if isinstance(current, bool):
+        return raw.strip().lower() in ("1", "true", "yes", "on")
+    if isinstance(current, int) and not isinstance(current, bool):
+        try:
+            return int(raw)
+        except ValueError:
+            return current
+    if isinstance(current, float):
+        try:
+            return float(raw)
+        except ValueError:
+            return current
+    if isinstance(current, list):
+        try:
+            parsed = json.loads(raw)
+            return parsed if isinstance(parsed, list) else [
+                s.strip() for s in raw.split(",") if s.strip()
+            ]
+        except json.JSONDecodeError:
+            return [s.strip() for s in raw.split(",") if s.strip()]
+    return raw
+
+
+def _env_overrides() -> dict[str, Any]:
+    """Any ``GEMINI_PROXY_<KEY>`` env var overrides config key ``<key>`` (lower).
+    ``GEMINI_PROXY_CONFIG`` is reserved for the config-file path."""
+    out: dict[str, Any] = {}
+    for name, raw in os.environ.items():
+        if not name.startswith("GEMINI_PROXY_") or name in (
+            CONFIG_ENV_VAR,
+            "GEMINI_PROXY_LOG_LEVEL",
+        ):
+            continue
+        key = name[len("GEMINI_PROXY_"):].lower()
+        if key in DEFAULTS:
+            out[key] = _coerce(raw, DEFAULTS[key])
+    return out
+
+
 def load_config(explicit_path: str | os.PathLike[str] | None = None) -> Config:
+    overrides = _env_overrides()
     for path in _candidate_paths(explicit_path):
         if path.is_file():
             try:
@@ -131,6 +172,6 @@ def load_config(explicit_path: str | os.PathLike[str] | None = None) -> Config:
             if not isinstance(data, dict):
                 raise RuntimeError(f"Config file {path} must contain a JSON object")
             logger.info("Loaded config from %s", path)
-            return Config(data, path)
+            return Config({**data, **overrides}, path)
     logger.info("No config file found; using built-in defaults")
-    return Config({}, None)
+    return Config(overrides, None)

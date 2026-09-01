@@ -1,12 +1,18 @@
 __pycache__/
 .venv/
+.probe/
 *.pyc
+.pytest_cache/
+
+# secrets / local state
 .env
 config.json
 cookies.json
+cookies.txt
 *.cookies.json
 admin_credential
 data/
-.pytest_cache/
-.probe/
 *.db
+
+# deployment
+deploy/config/

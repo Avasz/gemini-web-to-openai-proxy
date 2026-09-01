@@ -1,220 +1,85 @@
 # Gemini Web → OpenAI-compatible API gateway
 
-Exposes an authenticated `gemini.google.com` web session as an OpenAI-compatible and
-Google-native HTTP API. Built to the spec in `SRS_CLEAN_ROOM_REWRITE.md`.
+An HTTP service that authenticates to `gemini.google.com` (the consumer Gemini web
+app) with browser session cookies and exposes it as a programmable API in two
+wire formats:
 
-- **API reference:** [`docs/API.md`](docs/API.md) — every endpoint and parameter
-- **Configuration reference:** [`docs/CONFIGURATION.md`](docs/CONFIGURATION.md) —
-  config keys, cookie file formats, CLI flags, environment variables
+- **OpenAI-compatible** — `/v1/chat/completions`, `/v1/responses`, `/v1/models`
+- **Google-native** — `/v1beta/models/{model}:generateContent` etc.
 
-## Status
+No Google Cloud project, no API key, no billing — it reuses one personal Google
+account's existing Gemini access. Built clean-room to `SRS_CLEAN_ROOM_REWRITE.md`.
 
-Phase 1 (Foundation) complete:
+- **API reference:** [`docs/API.md`](docs/API.md)
+- **Configuration:** [`docs/CONFIGURATION.md`](docs/CONFIGURATION.md)
+- **Deployment:** [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md)
+- **Known gaps / follow-ups:** [`docs/BACKLOG.md`](docs/BACKLOG.md)
 
-- JSON config loading with discovery order and built-in defaults (`app/config.py`)
-- `.env` loader for secrets (`app/dotenv.py`)
-- Permissive cookie-export parsing + mtime-cached file store (`app/cookies.py`)
-- One shared, lazily-initialized `gemini_webapi` client with anonymous/guest
-  fallback and teardown/reinit (`app/gemini_service.py`)
-- `GET /healthz` (liveness) and `GET /status` (Gemini client health) endpoints
-
-Phase 2 (Core OpenAI-compatible chat) complete:
-
-- `GET /v1/models` — live model list from the authenticated account
-- `POST /v1/chat/completions` — non-streaming and SSE streaming (OpenAI delta format)
-- Message array → single Gemini prompt, role sections preserved; image parts split
-  out for Phase 4 (`app/translation.py`)
-- Live model resolution with a `-high` reasoning suffix mapped to `gemini_webapi`'s
-  on/off `extended_thinking`; unknown model → 400 listing the account's real models
-  (`app/model_selection.py`)
-- Every response carries `x_gemini_proxy` metadata: the validated served model
-  (never the model's self-claim), model id, cookie mode, and live account usage
-- Per-endpoint API-key auth, separate from the (future) admin credential (`app/auth.py`)
-- Upstream failures (guest-tier model, expired session, usage cap, timeout) are
-  classified into clean client errors with sensible status codes and logged at
-  WARNING without a stack trace (`app/errors.py`); a non-default model on a guest
-  session is rejected before the network call
-
-Phase 3 (Google-native parity) complete:
-
-- `GET /v1beta/models`, `GET /v1beta/models/{model}` — Google `{"models":[...]}` shape
-- `POST /v1beta/models/{model}:generateContent` — `candidates` / `usageMetadata` /
-  `modelVersion` response shape
-- `POST /v1beta/models/{model}:streamGenerateContent` — JSON-array framing by
-  default, SSE framing with `?alt=sse`
-- `contents` + `systemInstruction` flattened to the same Gemini prompt; `inlineData`
-  image parts split into the shared image list (`app/translation.py`)
-- shares model resolution + generation plumbing with the OpenAI path
-- `GEMINI_COOKIE_PATH` (the library's rotated-cookie cache) is pointed at
-  `{data_dir}/gemini_webapi` so all local state is one mountable directory
-- `/status` now reports the actual cookie source the client authenticated with
-  (`Cache` / `Base Cookies` / `Browser (...)` / `Guest`)
-- `force_anonymous` config option: ignore the cookie file *and* the library cache,
-  disable auto-refresh — for verifying the credential-free path (SRS §7)
-
-Phase 4 (Multimodal) complete:
-
-- **Image input** — `image_url` (OpenAI) and `inlineData` / `fileData` (Google)
-  parts are fetched/decoded server-side, MIME sniffed from magic bytes (PNG, JPEG,
-  GIF, WEBP, BMP, TIFF, AVIF, HEIC), written to real temp files with the right
-  extension, and passed to Gemini (`app/media.py`)
-- a bad/unreachable image is skipped, not fatal, and reported in
-  `x_gemini_proxy.input_image_errors`
-- **Image output** — images in a reply are downloaded through the authenticated
-  session and returned base64 inline: a top-level `images` array on both APIs,
-  plus native `inlineData` parts on the Google path
-- config: `image_fetch_timeout`, `max_image_bytes`
-
-Phase 5 (tool / function calling) complete:
-
-- OpenAI `tools` / `tool_choice` and Google `tools` / `toolConfig` both normalised
-  to one internal shape, injected into the prompt as a plain-text call contract
-  (Gemini Web has no native function calling) — `app/tools.py`
-- reply parsing tolerates the fenced `tool_call` block **with or without a newline
-  before the closing fence** (SRS 2.3), multiple blocks, `json`/`tool_code` tags,
-  and a bare JSON object as a last resort (SRS 2.4)
-- OpenAI: `message.tool_calls` + `finish_reason: "tool_calls"`; streaming
-  suppresses partial deltas and emits a `tool_calls` frame at the end
-- Google: `functionCall` parts in `candidates[].content.parts`
-- prior `tool_calls` / `tool` messages are rendered back into the prompt so the
-  model sees tool results on the next turn
-- **caveat:** whether Gemini emits a call vs. answering inline is not guaranteed
-  even with `tool_choice: required` — prompt-engineered, not native. Compliance
-  tuning is deferred (`docs/BACKLOG.md`); the parse/shape path is complete.
-
-Phase 6 (OpenAI Responses API) complete:
-
-- `POST /v1/responses` — a separate surface from Chat Completions, not an alias
-- flat `input` (string or typed-item array: `message` / `function_call` /
-  `function_call_output`) + `instructions`, flattened to the shared Gemini prompt
-  (`responses_input_to_prompt` in `app/translation.py`)
-- `response` object with an `output` item array + aggregated `output_text`; tool
-  calls as `function_call` output items
-- named-event SSE streaming: `response.created` → `response.output_text.delta` …
-  → `response.completed`, plus `response.function_call_arguments.*` for tools
-- shares model resolution, images and tool parsing with the other surfaces
-
-Phase 7 (local observability) complete:
-
-- `GET /status` now reports **three independent health signals** (SRS 2.7):
-  `page_reachable` (cookie value isn't garbage), `client_authenticated`
-  (`account_status == AVAILABLE` — can be false while the page loads),
-  `recent_requests_ok` (generations completing over the last hour) — plus an
-  `overall` roll-up (`app/health.py`)
-- **local request history** in `{data_dir}/activity.db` (SQLite): every generation
-  attempt on any surface — model requested/served, ok/fail, error code, latency,
-  size — written off the request path by a background worker; a write failure
-  never touches the request (`app/activity_log.py`)
-- `/status.activity` rolls the trailing 24h up: totals, error rate, avg latency,
-  per-served-model breakdown, errors by code, time since last request
-- rows pruned to `activity_log_retention_days`
-
-Phase 8 (admin dashboard + hot cookie reload) complete:
-
-- `GET /admin` — browser dashboard (health signals + 24h activity, human-readable)
-  with a textarea to paste a cookie export
-- `POST /admin/cookies` — apply an export now: writes `cookie_file`, tears down +
-  rebuilds the client, **no restart** (`app/cookie_admin.py`)
-- `GET /admin/status.json` — auth-gated copy of `/status` for monitoring tools
-- **separate credential** from the generation `api_keys` (`app/admin_auth.py`):
-  `ADMIN_PASSWORD` env/`.env`, else a random one generated on first boot, saved
-  `{data_dir}/admin_credential` (mode 600), logged at startup. Accepted as HTTP
-  Basic, `X-Admin-Password` header, or `?admin_key=`
-- **cookie watcher** (`app/cookie_watcher.py`): rebuilds the client automatically
-  when `cookie_file`'s `__Secure-1PSID` changes (a new session dropped in) —
-  ignores `__Secure-1PSIDTS` rotation so it never triggers a needless cold
-  re-init; optional `cookie_watch_file` is mirrored into `cookie_file`
-- config: `admin_username`, `cookie_watch_interval`, `cookie_watch_file`
-
-Phase 9 (reliability hardening) complete:
-
-- `app/concurrency.py` — a `GenerationGate` caps in-flight generations against the
-  single shared upstream connection at `max_concurrent_generations` (default 3,
-  **not** 1); requests over the cap wait up to `slot_wait_timeout` then get a
-  clean `503 capacity` instead of piling on (SRS 2.8's production incident)
-- non-streaming generations are bounded by `request_timeout` (outer `asyncio`
-  timeout → `504 request_timeout`); library `connection_timeout` /
-  `zombie_stream_timeout` were already shortened from the defaults in Phase 1
-- `/status.capacity` reports `{limit, in_flight, waiting, rejected_total}`
-- rejected multi-session / full-serialisation per SRS; slow-response-into-dead-
-  connection tradeoff documented in `docs/API.md`
-
-Phase 10 (temporary chat + warm sessions) complete:
-
-- **Temporary chat** (SRS 2.10): `temporary_chat_default` config + a per-request
-  override on every generation endpoint (`temporary_chat` / `temporaryChat`);
-  omitting it falls back to the config default. Sets Gemini's own "not in account
-  history" flag — does not affect this service's request history (documented)
-- **Warm sessions** (SRS 2.11, opt-in): `POST /v1/sessions` opens a chat and
-  sends one real priming message; `GET`/`DELETE /v1/sessions[/{id}]`. A request
-  opts in with `session_id` — model then fixed to the session's, unknown/expired
-  → `409` (never a silent fresh conversation). In-memory only, idle-pruned,
-  LRU-capped, and invalidated whenever the client is rebuilt (`app/warm_sessions.py`)
-- config: `max_warm_sessions`
-- **latency benefit not yet benchmarked** (`docs/BACKLOG.md`)
-
-**All 10 SRS phases implemented.** 120 tests. Remaining: Docker image, dashboard
-visual design, warm-session benchmark — see `docs/BACKLOG.md`.
-
-## Setup
+## Quick start
 
 ```bash
 uv venv --python 3.13
 uv pip install -e ".[dev]"
+cp config.example.json config.json
 ```
 
-## Run
+Export your `google.com` cookies (Firefox recommended) to `./cookies.json` — a
+JSON array, a `{"cookie": "..."}` object, or a raw `name=value; ...` string all
+work. Verify before starting:
 
 ```bash
-python -m app                 # uses defaults / discovered config.json
-python -m app --port 8000     # override
-python -m app -c ./config.json --reload
+python scripts/check_cookies.py        # want: "OK - authenticated, all models available"
 ```
 
-Copy `config.example.json` to `config.json` to customize. With no config and no
-cookies, the service starts in anonymous/guest tier.
+Then run and check:
 
-Interactive API docs: `http://127.0.0.1:8000/docs` (provided by FastAPI).
+```bash
+python -m app                          # or: uvicorn app.main:app --port 8000
+curl -s localhost:8000/status | python -m json.tool
+```
+
+Point any OpenAI client at `http://localhost:8000/v1` (`api_key` can be anything
+unless you set `api_keys` in the config):
+
+```python
+from openai import OpenAI
+c = OpenAI(base_url="http://localhost:8000/v1", api_key="unused")
+print(c.chat.completions.create(model="gemini-flash",
+      messages=[{"role": "user", "content": "hi"}]).choices[0].message.content)
+```
+
+## Features
+
+| Area | |
+|---|---|
+| **Models** | live per-account list; `-high` suffix → extended thinking; unknown model → 4xx with the real list, never a silent swap |
+| **OpenAI** | `/v1/chat/completions` + `/v1/responses` (independent surfaces), streaming, multimodal in/out, prompt-engineered tool calling |
+| **Google-native** | `/v1beta` model list + `generateContent` + `streamGenerateContent` (`?alt=sse` or JSON array) |
+| **Images** | URL / `data:` / `inlineData` in; MIME sniffed from magic bytes; generated images returned base64 inline |
+| **Metadata** | every response carries `x_gemini_proxy` — the *validated* served model (not the model's self-claim), live quota |
+| **Reliability** | one shared connection, capped at `max_concurrent_generations` (SRS 2.8); over the cap → `503`, retry |
+| **Observability** | `/status` — three independent health signals + a 24h request-history summary (`data_dir/activity.db`) |
+| **Admin** | `/admin` dashboard + hot cookie reload (`POST /admin/cookies`), own credential, separate from `api_keys` |
+| **Temporary chat** | per-request / config default; keeps the chat out of Google's account history |
+| **Warm sessions** | opt-in `/v1/sessions` — **experimental**, see `docs/BACKLOG.md` |
+
+## Operating notes
+
+- **Don't restart-storm the process.** Each start does a cold Gemini auth; many
+  cold re-auths in a short window push the Google account into an
+  `UNAUTHENTICATED` state that takes hours to clear (SRS §7). Leave it running —
+  the background refresh keeps the session alive.
+- **One process per Google account** — two refreshers fight over cookie rotation.
+- A cookie export's `__Secure-1PSIDTS` goes stale within ~30 min; export it
+  fresh, or let the running process's auto-refresh take over. See the
+  `__Secure-1PSIDTS` trap in `docs/CONFIGURATION.md`.
+- Gemini generations can stall for minutes; "succeeded server-side" ≠ "client
+  still connected". Use generous client timeouts.
 
 ## Tests
 
 ```bash
-pytest                                    # unit tests, no network
-python scripts/check_anonymous.py         # live: zero-credential guest session
-python scripts/check_anonymous.py --prompt "say hi"
-python scripts/check_cookies.py           # verify cookies.json authenticates (per-model)
+pytest                                 # ~120 tests, fully offline (fake gemini client)
+python scripts/check_anonymous.py      # live: zero-credential guest session
+python scripts/check_cookies.py        # live: verify cookies.json per-model
 ```
-
-### Try the OpenAI API live
-
-```bash
-python -m app --port 8000
-
-curl -s localhost:8000/v1/models | python -m json.tool
-
-curl -s localhost:8000/v1/chat/completions -H 'content-type: application/json' \
-  -d '{"model":"gemini-flash","messages":[{"role":"user","content":"Reply with exactly: pong"}]}'
-
-curl -sN localhost:8000/v1/chat/completions -H 'content-type: application/json' \
-  -d '{"model":"gemini-flash","stream":true,"messages":[{"role":"user","content":"Count 1 to 3"}]}'
-```
-
-Works with any OpenAI client by pointing `base_url` at `http://localhost:8000/v1`.
-Append `-high` to a model name (e.g. `gemini-pro-high`) to enable extended thinking.
-
-### Try the Google-native API live
-
-```bash
-curl -s localhost:8000/v1beta/models | python -m json.tool
-
-curl -s "localhost:8000/v1beta/models/gemini-flash:generateContent" \
-  -H 'content-type: application/json' \
-  -d '{"contents":[{"role":"user","parts":[{"text":"Name 3 fruits"}]}]}'
-
-curl -sN "localhost:8000/v1beta/models/gemini-flash:streamGenerateContent?alt=sse" \
-  -H 'content-type: application/json' \
-  -d '{"contents":[{"role":"user","parts":[{"text":"Count 1 to 3"}]}]}'
-```
-
-Point `google-genai` at it with `http_options={"base_url": "http://localhost:8000"}`
-and `api_key` set to one of your configured `api_keys` (or anything if none).

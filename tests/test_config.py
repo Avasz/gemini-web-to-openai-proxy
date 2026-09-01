@@ -40,6 +40,22 @@ def test_cwd_config_json(tmp_path, monkeypatch):
     assert cfg.port == 1234
 
 
+def test_env_override_of_config_keys(tmp_path, monkeypatch):
+    p = tmp_path / "config.json"
+    p.write_text(json.dumps({"port": 8000, "max_concurrent_generations": 3}))
+    monkeypatch.setenv("GEMINI_PROXY_PORT", "9100")
+    monkeypatch.setenv("GEMINI_PROXY_MAX_CONCURRENT_GENERATIONS", "5")
+    monkeypatch.setenv("GEMINI_PROXY_FORCE_ANONYMOUS", "true")
+    monkeypatch.setenv("GEMINI_PROXY_API_KEYS", "k1,k2")
+    monkeypatch.setenv("GEMINI_PROXY_UNKNOWN_KEY", "ignored")
+    cfg = load_config(p)
+    assert cfg.port == 9100                      # int coerced
+    assert cfg.max_concurrent_generations == 5
+    assert cfg.force_anonymous is True           # bool coerced
+    assert cfg.api_keys == ["k1", "k2"]          # list coerced
+    assert not hasattr(cfg, "unknown_key")
+
+
 def test_relative_path_resolves_against_config_dir(tmp_path):
     p = tmp_path / "config.json"
     p.write_text(json.dumps({"cookie_file": "cookies.json"}))

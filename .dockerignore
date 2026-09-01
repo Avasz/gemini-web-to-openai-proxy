@@ -1,0 +1,17 @@
+.git
+.venv
+.probe
+__pycache__
+*.pyc
+.pytest_cache
+tests
+scripts
+data
+config.json
+cookies.json
+*.cookies.json
+admin_credential
+*.db
+.env
+docs
+SRS_CLEAN_ROOM_REWRITE.md

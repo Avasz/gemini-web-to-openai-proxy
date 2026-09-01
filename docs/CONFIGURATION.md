@@ -24,6 +24,9 @@ The file must be a single JSON object. Unknown keys are ignored. Any key you omi
 falls back to its default. Copy [`config.example.json`](../config.example.json)
 to start.
 
+A `GEMINI_PROXY_<KEY>` environment variable overrides the matching config key
+(see [Environment variables](#environment-variables)) — useful for containers.
+
 Relative paths in the config (`cookie_file`, `data_dir`) resolve against the
 **config file's own directory**; if there is no config file they resolve against
 the current working directory.
@@ -209,7 +212,8 @@ uvicorn app.main:app --port 8000
 | `GEMINI_PROXY_CONFIG` | config file path (discovery step 2) |
 | `GEMINI_PROXY_LOG_LEVEL` | log level for the app logger (default `INFO`) |
 | `XDG_CONFIG_HOME` | base for the user-level config lookup (discovery step 4) |
-| `GEMINI_COOKIE_PATH` | where `gemini_webapi` stores its cookie cache. **The service sets this itself** to `{data_dir}/gemini_webapi[_anon]` on startup; setting it yourself is overridden |
+| `GEMINI_COOKIE_PATH` | where `gemini_webapi` stores its cookie cache. Honored if set before startup (else `{data_dir}/gemini_webapi`); `cookie_cache_dir` in the config wins over it |
+| `GEMINI_PROXY_<KEY>` | overrides config key `<key>` (lower-cased) with type coercion — e.g. `GEMINI_PROXY_PORT=9000`, `GEMINI_PROXY_FORCE_ANONYMOUS=true`, `GEMINI_PROXY_API_KEYS=k1,k2`. `GEMINI_PROXY_CONFIG` and `GEMINI_PROXY_LOG_LEVEL` are reserved (above) |
 
 ### `.env` file
 

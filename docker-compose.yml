@@ -1,0 +1,19 @@
+services:
+  gemini-openai-proxy:
+    build: .
+    image: gemini-openai-proxy
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      # pin the admin password (else one is generated and logged on first boot)
+      # ADMIN_PASSWORD: "change-me"
+      GEMINI_PROXY_LOG_LEVEL: INFO
+    volumes:
+      # your config.json + cookies.json (see config.example.json / docs/CONFIGURATION.md)
+      - ./deploy/config:/config
+      # rotated-cookie cache, activity.db, admin_credential — MUST persist across recreates
+      - gop-data:/data
+
+volumes:
+  gop-data:
