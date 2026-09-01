@@ -34,14 +34,28 @@ class GeminiService:
         self._init_error: str | None = None
         self._cookie_mode: str = "uninitialized"
         self._force_anonymous = bool(getattr(config, "force_anonymous", False))
+        self._auto_refresh = not self._force_anonymous and bool(
+            getattr(config, "auto_refresh", True)
+        )
         # The library reads its rotated-cookie cache dir from $GEMINI_COOKIE_PATH
         # lazily on each call, so setting it here (before the first init) is enough.
-        # Keep it under data_dir so it is a single mountable volume (SRS 3), and
-        # use a dedicated sub-dir in forced-anonymous mode that never saw an
-        # authenticated session (SRS 7 -- avoid a stale cache false positive).
-        data_dir = config.resolve_path(getattr(config, "data_dir", "data"))
-        sub = "gemini_webapi_anon" if self._force_anonymous else "gemini_webapi"
-        self._cookie_cache_dir = data_dir / sub
+        # Precedence: explicit `cookie_cache_dir` config > pre-set $GEMINI_COOKIE_PATH
+        # env var > {data_dir}/gemini_webapi (a single mountable volume, SRS 3).
+        # Forced-anonymous always uses a dedicated sub-dir that never saw an
+        # authenticated session (SRS 7 -- avoid a stale-cache false positive).
+        explicit = getattr(config, "cookie_cache_dir", None)
+        if self._force_anonymous:
+            self._cookie_cache_dir = config.resolve_path(
+                getattr(config, "data_dir", "data")
+            ) / "gemini_webapi_anon"
+        elif explicit:
+            self._cookie_cache_dir = config.resolve_path(explicit)
+        elif os.environ.get("GEMINI_COOKIE_PATH"):
+            self._cookie_cache_dir = Path(os.environ["GEMINI_COOKIE_PATH"]).expanduser()
+        else:
+            self._cookie_cache_dir = config.resolve_path(
+                getattr(config, "data_dir", "data")
+            ) / "gemini_webapi"
         self._cookie_cache_dir.mkdir(parents=True, exist_ok=True)
         os.environ["GEMINI_COOKIE_PATH"] = str(self._cookie_cache_dir)
 
@@ -85,7 +99,7 @@ class GeminiService:
                 await client.init(
                     timeout=float(self._config.connection_timeout),
                     auto_close=False,
-                    auto_refresh=not self._force_anonymous,
+                    auto_refresh=self._auto_refresh,
                     refresh_interval=float(self._config.cookie_refresh_interval),
                     watchdog_timeout=float(self._config.zombie_stream_timeout),
                 )

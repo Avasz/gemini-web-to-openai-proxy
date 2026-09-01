@@ -45,6 +45,8 @@ the current working directory.
 | `connection_timeout` | number (s) | `60.0` | active | passed to `gemini_webapi` as its request timeout |
 | `zombie_stream_timeout` | number (s) | `90.0` | active | passed as the library's stream watchdog timeout |
 | `cookie_refresh_interval` | number (s) | `600.0` | active | how often the library refreshes cookies/token in the background |
+| `cookie_cache_dir` | string (path) or null | `null` | active | where `gemini_webapi` keeps its rotated-cookie cache. `null` ⇒ a pre-set `$GEMINI_COOKIE_PATH`, else `{data_dir}/gemini_webapi` |
+| `auto_refresh` | boolean | `true` | active | let the library keep the session token fresh in the background. Turn **off** only when another process already owns refresh for the same account |
 | `max_concurrent_generations` | integer | `3` | reserved | in-flight generation cap (Phase 9) |
 | `activity_log_retention_days` | integer | `7` | reserved | local request-history retention (Phase 7) |
 | `warm_session_idle_timeout` | number (s) | `900.0` | reserved | warm-session pruning (Phase 10) |
@@ -136,6 +138,25 @@ can't be parsed is logged and treated as "no cookies" rather than crashing.
 > `{data_dir}/gemini_webapi/` and (once the first auth succeeds) keeps it alive
 > indefinitely via background refresh. Deleting `cookie_file` alone does **not**
 > end the session — clear that directory too, or set `force_anonymous: true`.
+
+### The `__Secure-1PSIDTS` freshness trap
+
+`__Secure-1PSIDTS` rotates every ~10–30 minutes and Google tracks the current
+value server-side. If you present a **stale** one, Gemini still hands back a token
+but marks the session `UNAUTHENTICATED` (`/status` shows `authenticated` from the
+cookie file, but non-default models and image upload are refused and
+`account_status` is not `AVAILABLE`).
+
+A cookie export captured minutes ago is fine — the library's background refresh
+then keeps it current. An export that has been sitting in `cookie_file` for an
+hour is likely stale on a cold start. If you see the symptoms above with cookies
+you know are for the right, provisioned account:
+
+- re-export **right after** loading `gemini.google.com` in the browser, and start
+  the service promptly, **or**
+- point `cookie_cache_dir` at a directory that another *running* instance of the
+  same account keeps fresh, and set `auto_refresh: false` here so the two don't
+  both rotate the token (two refreshers invalidate each other).
 
 ---
 

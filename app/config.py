@@ -40,6 +40,14 @@ DEFAULTS: dict[str, Any] = {
     # rotated-cookie cache, and disable auto-refresh. Useful for verifying the
     # credential-free path without a stale cached session shadowing it (SRS 7).
     "force_anonymous": False,
+    # Where gemini_webapi keeps its rotated-cookie cache. null => {data_dir}/gemini_webapi
+    # (or a pre-set $GEMINI_COOKIE_PATH). Point two instances of THE SAME account at
+    # one dir only if at most one of them has auto_refresh on -- two refreshers race
+    # each other's __Secure-1PSIDTS rotation.
+    "cookie_cache_dir": None,
+    # Let the library keep the session's cookies/token fresh in the background.
+    # Turn OFF only when another process already owns refresh for this account.
+    "auto_refresh": True,
     # Reliability tunables (SRS 2.8)
     "max_concurrent_generations": 3,
     "connection_timeout": 60.0,
