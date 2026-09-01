@@ -122,7 +122,7 @@ def test_google_mode_any_forces_injection(client_factory, fake_client):
             },
         )
     prompt = fake_client.calls[-1]["prompt"]
-    assert "MUST call" in prompt
+    assert "tool-call turn" in prompt.lower()
 
 
 def test_tool_result_roundtrip_in_followup(client_factory, fake_client):

@@ -39,7 +39,7 @@ def test_choice_mapping():
 def test_instructions_include_tool_and_required_note():
     block = build_tool_instructions([WEATHER], ToolChoice("required", ["get_weather"]))
     assert "get_weather" in block
-    assert "MUST call" in block
+    assert "tool-call turn" in block.lower() or "must respond" in block.lower()
     block2 = build_tool_instructions([WEATHER], ToolChoice("none"))
     assert block2 == ""
 

@@ -143,24 +143,27 @@ def build_tool_instructions(tools: list[ToolSpec], choice: ToolChoice) -> str:
         t for t in tools if not choice.allowed or t.name in choice.allowed
     ] or tools
 
+    required = choice.mode == "required"
+
     lines: list[str] = [
-        "## Tools available to you",
+        "## Tool-calling protocol",
         "",
-        "You can call the tools listed below instead of answering from your own "
-        "knowledge. This is often the correct choice for anything time-sensitive, "
-        "external, or that a tool is clearly designed for.",
-        "",
-        "To call a tool, your reply must contain a fenced code block tagged "
-        f"`{_FENCE_TAG}` whose body is a single JSON object of the form "
-        '`{"name": "<tool name>", "arguments": {<arguments matching the schema>}}`. '
-        "Do not put anything else inside the block. You may include a short "
-        "sentence of prose before the block. Example of the exact shape:",
+        "This environment routes tool calls. A tool call is expressed as a fenced "
+        f"code block tagged `{_FENCE_TAG}` containing exactly one JSON object:",
         "",
         f"```{_FENCE_TAG}",
-        '{"name": "example_tool", "arguments": {"some_arg": "some value"}}',
+        '{"name": "<tool name>", "arguments": {<args matching that tool\'s schema>}}',
         "```",
         "",
-        "After the tool result is sent back to you, continue normally.",
+        "Rules:",
+        "- Use the exact argument names from the tool's JSON Schema below.",
+        "- The block body must be only that JSON object — no comments, no prose "
+        "inside the block.",
+        "- Prose before the block is allowed; nothing after it.",
+        "- When a tool can answer the request, calling it is strongly preferred "
+        "over answering from memory — especially for anything real-time, external, "
+        "user-specific, or that a tool is named for.",
+        "- The tool result is sent back to you afterwards; then answer normally.",
         "",
         "Tools:",
     ]
@@ -169,19 +172,24 @@ def build_tool_instructions(tools: list[ToolSpec], choice: ToolChoice) -> str:
         desc = f" — {t.description}" if t.description else ""
         lines.append(f"- `{t.name}`{desc}\n  arguments JSON Schema: {params}")
 
-    if choice.mode == "required":
-        if len(visible) == 1:
-            lines.append(
-                f"\nFor this turn you MUST call `{visible[0].name}`. Do not answer "
-                f"from your own knowledge. Reply with the `{_FENCE_TAG}` block for "
-                f"`{visible[0].name}` and nothing after it."
-            )
-        else:
-            names = ", ".join(f"`{t.name}`" for t in visible)
-            lines.append(
-                f"\nFor this turn you MUST call one of: {names}. Do not answer from "
-                f"your own knowledge. Reply with a single `{_FENCE_TAG}` block."
-            )
+    if required:
+        target = (
+            f"`{visible[0].name}`"
+            if len(visible) == 1
+            else "one of " + ", ".join(f"`{t.name}`" for t in visible)
+        )
+        lines += [
+            "",
+            "### This turn is a tool-call turn",
+            "",
+            f"You must respond with a {_FENCE_TAG} block calling {target}. "
+            "Do NOT answer the user's question yourself, do NOT explain that you "
+            "lack live data, do NOT describe what the tool would return. Your "
+            f"entire response is the {_FENCE_TAG} block. Infer any missing "
+            "argument values from the conversation; if truly unknown, use your "
+            "best guess or an empty string. Begin your response with three "
+            "backticks now.",
+        ]
     return "\n".join(lines)
 
 
