@@ -15,6 +15,7 @@ from .dotenv import load_dotenv
 from .gemini_service import GeminiService
 from .google_api import router as google_router
 from .openai_api import router as openai_router
+from .responses_api import router as responses_router
 
 logging.basicConfig(
     level=os.environ.get("GEMINI_PROXY_LOG_LEVEL", "INFO"),
@@ -58,6 +59,7 @@ def create_app(config: Config | None = None) -> FastAPI:
     app.state.gemini = gemini
 
     app.include_router(openai_router)
+    app.include_router(responses_router)
     app.include_router(google_router)
 
     @app.get("/healthz")

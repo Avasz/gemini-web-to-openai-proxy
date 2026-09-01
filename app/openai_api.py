@@ -1,9 +1,11 @@
-"""OpenAI-compatible endpoints (SRS 2.3).
+"""OpenAI-compatible Chat Completions endpoints (SRS 2.3).
 
-Phase 2 scope: ``GET /v1/models``, ``POST /v1/chat/completions`` (non-streaming
-and SSE streaming), message-to-prompt translation, live model resolution, and the
-served-model response metadata. Images (Phase 4), tools (Phase 5) and
-``/v1/responses`` (Phase 6) come later.
+``GET /v1/models`` and ``POST /v1/chat/completions`` (non-streaming + SSE), with
+message-to-prompt translation, live model resolution, served-model metadata,
+multimodal input/output and prompt-engineered tool calling.
+
+The Responses API (``POST /v1/responses``) is a separate surface in
+``app/responses_api.py``.
 """
 
 from __future__ import annotations

@@ -139,6 +139,84 @@ def google_contents_to_prompt(
     return PromptBundle(prompt=prompt, images=images)
 
 
+def _responses_content_text(content: Any, images: list[ImageRef]) -> str:
+    if content is None:
+        return ""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        chunks: list[str] = []
+        for part in content:
+            if isinstance(part, str):
+                chunks.append(part)
+                continue
+            if not isinstance(part, dict):
+                chunks.append(str(part))
+                continue
+            ptype = part.get("type")
+            if ptype in ("input_text", "output_text", "text", "summary_text") or "text" in part:
+                chunks.append(str(part.get("text", "")))
+            elif ptype in ("input_image", "image_url", "image"):
+                img = part.get("image_url")
+                url = (
+                    img.get("url")
+                    if isinstance(img, dict)
+                    else img or part.get("image_url") or part.get("url")
+                )
+                if url:
+                    images.append(ImageRef(url=str(url), detail=part.get("detail")))
+        return "\n".join(c for c in chunks if c)
+    return str(content)
+
+
+def responses_input_to_prompt(
+    input_value: Any, instructions: Any = None
+) -> PromptBundle:
+    """Flatten an OpenAI Responses API ``input`` (+ ``instructions``) into the
+    single Gemini prompt (SRS 2.3). ``input`` may be a bare string or a list of
+    typed items (``message`` / ``function_call`` / ``function_call_output``)."""
+    images: list[ImageRef] = []
+    sections: list[str] = []
+
+    if isinstance(instructions, str) and instructions.strip():
+        sections.append(f"System:\n{instructions.strip()}")
+    elif isinstance(instructions, list):
+        t = _responses_content_text(instructions, images)
+        if t:
+            sections.append(f"System:\n{t}")
+
+    if isinstance(input_value, str):
+        sections.append(f"User:\n{input_value}")
+        input_value = []
+    if isinstance(input_value, dict):
+        input_value = [input_value]
+
+    for item in input_value or []:
+        if isinstance(item, str):
+            sections.append(f"User:\n{item}")
+            continue
+        if not isinstance(item, dict):
+            continue
+        itype = item.get("type", "message")
+        if itype in ("function_call",):
+            name = item.get("name", "unknown")
+            args = item.get("arguments", "")
+            sections.append(f"Assistant:\n[called tool: {name}({args})]")
+        elif itype in ("function_call_output", "tool_result"):
+            out = item.get("output", "")
+            cid = item.get("call_id") or item.get("tool_call_id") or "tool"
+            sections.append(f"Tool result:\n({cid}) {out}")
+        else:  # "message" or shorthand {role, content}
+            role = (item.get("role") or "user").lower()
+            label = _ROLE_LABELS.get(role, role.capitalize())
+            text = _responses_content_text(item.get("content"), images)
+            if text:
+                sections.append(f"{label}:\n{text}".rstrip())
+
+    prompt = "\n\n".join(sections).strip() or "(empty conversation)"
+    return PromptBundle(prompt=prompt, images=images)
+
+
 def messages_to_prompt(messages: list[dict[str, Any]]) -> PromptBundle:
     images: list[ImageRef] = []
     sections: list[str] = []

@@ -20,6 +20,7 @@ and `/redoc`.
 - [OpenAI-compatible API](#openai-compatible-api)
   - [`GET /v1/models`](#get-v1models)
   - [`POST /v1/chat/completions`](#post-v1chatcompletions)
+  - [`POST /v1/responses`](#post-v1responses)
 - [Google-native API](#google-native-api)
   - [`GET /v1beta/models`](#get-v1betamodels)
   - [`GET /v1beta/models/{model}`](#get-v1betamodelsmodel)
@@ -289,6 +290,79 @@ Terminated by `data: [DONE]`.
 
 ---
 
+### `POST /v1/responses`
+
+OpenAI's **Responses API** shape — a separate surface from Chat Completions, not
+an alias. Some agentic coding tools speak only this.
+
+**Request body:**
+
+| Field | Type | Required | Default | Notes |
+|---|---|---|---|---|
+| `input` | string **or** array | **yes** | — | a plain string, or an array of typed items (below) |
+| `model` | string | no | `default_model` | see [Model names](#model-names) |
+| `instructions` | string | no | — | system prompt |
+| `stream` | boolean | no | `false` | named-event SSE stream (below) |
+| `tools` | array | no | — | Responses shape: `[{"type":"function","name","description","parameters"}]` (flat, not nested) — see [Tool calling](#tool-calling) |
+| `tool_choice` | string / object | no | `"auto"` | `"auto"` / `"none"` / `"required"` / `{"type":"function","name":"…"}` |
+| `temporary_chat` | boolean | no | `temporary_chat_default` | keep out of Gemini history |
+
+Other Responses fields (`temperature`, `max_output_tokens`, `previous_response_id`,
+`parallel_tool_calls`, `metadata`, `reasoning`, `store`, …) are **accepted and
+ignored** (`metadata` is echoed back). `previous_response_id` chaining is not
+implemented — send the prior turns in `input`.
+
+**`input[]` item shapes:**
+
+| Item | Notes |
+|---|---|
+| `{"type":"message","role","content"}` | `content` is a string or an array of parts: `{"type":"input_text"\|"output_text","text"}`, `{"type":"input_image","image_url"}` |
+| `{"role","content"}` | shorthand for a message item |
+| `{"type":"function_call","name","arguments","call_id"}` | a prior tool call — rendered into the prompt |
+| `{"type":"function_call_output","call_id","output"}` | a prior tool result — rendered into the prompt |
+| a bare string | treated as a user message |
+
+**Response `200` (non-streaming):**
+
+```json
+{
+  "id": "resp_…",
+  "object": "response",
+  "created_at": 1788248000,
+  "status": "completed",
+  "model": "gemini-flash",
+  "output": [
+    { "type": "message", "id": "msg_…", "status": "completed", "role": "assistant",
+      "content": [{ "type": "output_text", "text": "…", "annotations": [] }] }
+  ],
+  "output_text": "…",
+  "usage": { "input_tokens": 0, "output_tokens": 12, "total_tokens": 12 },
+  "x_gemini_proxy": { … }
+}
+```
+
+Tool calls appear as additional `output` items:
+`{"type":"function_call","id":"fc_…","call_id":"call_…","name":"…","arguments":"<json string>","status":"completed"}`.
+
+**Response `200` (streaming):** `text/event-stream` with named events:
+
+```
+event: response.created            → { response: {…, status:"in_progress"} }
+event: response.in_progress
+event: response.output_item.added  → item stub (message / function_call)
+event: response.content_part.added
+event: response.output_text.delta  → { delta: "…" }        (repeated)
+event: response.output_text.done   → { text: "…full…" }
+event: response.content_part.done
+event: response.output_item.done   → completed item
+event: response.function_call_arguments.delta / .done       (for tool calls)
+event: response.completed          → { response: {…full…, status:"completed"} }
+```
+
+Errors mid-stream come as `event: response.failed` with `response.error`.
+
+---
+
 ## Tool calling
 
 Gemini Web has **no native function-calling protocol**, so tool calling is
@@ -520,7 +594,6 @@ credentials actually work. No auth (yet).
 
 | Feature | Phase |
 |---|---|
-| `POST /v1/responses` (OpenAI Responses API) | 6 |
 | Local request history + 3-way `/status` health | 7 |
 | Admin dashboard, separate admin credential | 8 |
 | Concurrency cap + shortened timeouts (hardening) | 9 |

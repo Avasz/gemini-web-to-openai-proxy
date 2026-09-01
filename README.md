@@ -82,6 +82,18 @@ Phase 5 (tool / function calling) complete:
   even with `tool_choice: required` — prompt-engineered, not native. Compliance
   tuning is deferred (`docs/BACKLOG.md`); the parse/shape path is complete.
 
+Phase 6 (OpenAI Responses API) complete:
+
+- `POST /v1/responses` — a separate surface from Chat Completions, not an alias
+- flat `input` (string or typed-item array: `message` / `function_call` /
+  `function_call_output`) + `instructions`, flattened to the shared Gemini prompt
+  (`responses_input_to_prompt` in `app/translation.py`)
+- `response` object with an `output` item array + aggregated `output_text`; tool
+  calls as `function_call` output items
+- named-event SSE streaming: `response.created` → `response.output_text.delta` …
+  → `response.completed`, plus `response.function_call_arguments.*` for tools
+- shares model resolution, images and tool parsing with the other surfaces
+
 ## Setup
 
 ```bash
