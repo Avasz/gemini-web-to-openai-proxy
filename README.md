@@ -560,6 +560,7 @@ falls back to the (now stale) cookie file and the session degrades.
 **Quick start (prebuilt image, no clone):**
 
 ```bash
+docker pull ghcr.io/avasz/gemini-web-to-openai-proxy:latest
 mkdir gemini-web-to-openai-proxy && cd gemini-web-to-openai-proxy
 curl -fsSL https://raw.githubusercontent.com/Avasz/gemini-web-to-openai-proxy/main/docker-compose.yml -o docker-compose.yml
 docker compose up -d
