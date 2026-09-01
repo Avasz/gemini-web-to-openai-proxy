@@ -28,3 +28,10 @@ Ideas not yet tried:
 
 Tool calling *does* work end-to-end when the model emits the syntax (covered by
 tests with a canned reply); this is purely a compliance-rate problem.
+
+## Admin dashboard UI (Phase 8)
+
+`app/admin.py` serves a minimal built-in HTML page. The operator has their own UI
+to drop in later. The JSON contract is stable — `/admin/status.json`,
+`POST /admin/cookies`, and the admin-auth forms — so a replacement front end only
+needs to talk to those; `GET /admin` (the HTML) is the only thing that changes.
