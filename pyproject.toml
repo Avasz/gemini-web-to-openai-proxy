@@ -1,5 +1,5 @@
 [project]
-name = "gemini-openai-proxy"
+name = "gemini-web-to-openai-proxy"
 version = "0.1.0"
 description = "Gemini Web -> OpenAI-compatible API gateway"
 requires-python = ">=3.11"
@@ -20,7 +20,7 @@ dev = [
 ]
 
 [project.scripts]
-gemini-openai-proxy = "app.__main__:main"
+gemini-web-to-openai-proxy = "app.__main__:main"
 
 [build-system]
 requires = ["hatchling"]

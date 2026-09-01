@@ -120,7 +120,7 @@ async def require_admin(request: Request) -> None:
     raise HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Admin authentication required.",
-        headers={"WWW-Authenticate": 'Basic realm="gemini-openai-proxy admin"'},
+        headers={"WWW-Authenticate": 'Basic realm="gemini-web-to-openai-proxy admin"'},
     )
 
 

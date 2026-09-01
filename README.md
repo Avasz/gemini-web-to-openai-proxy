@@ -265,8 +265,8 @@ On startup the first file found in this order is loaded (the rest are ignored):
 1. path passed with `-c` / `--config`
 2. path named by the `GEMINI_PROXY_CONFIG` environment variable
 3. `./config.json` (current working directory)
-4. `$XDG_CONFIG_HOME/gemini-openai-proxy/config.json`
-   (falls back to `~/.config/gemini-openai-proxy/config.json`)
+4. `$XDG_CONFIG_HOME/gemini-web-to-openai-proxy/config.json`
+   (falls back to `~/.config/gemini-web-to-openai-proxy/config.json`)
 
 If none exist, **built-in defaults are used**: the service runs with zero
 configuration (anonymous/guest tier, open endpoints).
@@ -573,12 +573,12 @@ Pin the admin password instead of using the generated one by setting
 **plain docker:**
 
 ```bash
-docker build -t gemini-openai-proxy .
+docker build -t gemini-web-to-openai-proxy .
 docker run -d --name gop -p 8000:8000 \
   -v "$PWD/deploy/config:/config" \
   -v gop-data:/data \
   -e ADMIN_PASSWORD=change-me \
-  gemini-openai-proxy
+  gemini-web-to-openai-proxy
 ```
 
 ### Reverse proxy

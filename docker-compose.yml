@@ -1,7 +1,7 @@
 services:
-  gemini-openai-proxy:
+  gemini-web-to-openai-proxy:
     build: .
-    image: gemini-openai-proxy
+    image: gemini-web-to-openai-proxy
     restart: unless-stopped
     ports:
       - "8000:8000"

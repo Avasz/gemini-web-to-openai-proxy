@@ -158,7 +158,7 @@ def create_app(config: Config | None = None) -> FastAPI:
                 FileResponse(STATIC_DIR / "index.html", media_type="text/html"), request
             )
         return {
-            "name": "gemini-openai-proxy",
+            "name": "gemini-web-to-openai-proxy",
             "version": __version__,
             "links": {
                 "openapi_docs": "/docs",

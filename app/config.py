@@ -4,8 +4,8 @@ Discovery order for the JSON config file:
   1. explicit path passed to load_config()
   2. $GEMINI_PROXY_CONFIG naming a path
   3. ./config.json in the current directory
-  4. $XDG_CONFIG_HOME/gemini-openai-proxy/config.json
-     (falling back to ~/.config/gemini-openai-proxy/config.json)
+  4. $XDG_CONFIG_HOME/gemini-web-to-openai-proxy/config.json
+     (falling back to ~/.config/gemini-web-to-openai-proxy/config.json)
 
 A full set of defaults lives in DEFAULTS so the service starts with no config at all.
 """
@@ -21,7 +21,7 @@ from typing import Any
 logger = logging.getLogger("gemini_proxy.config")
 
 CONFIG_ENV_VAR = "GEMINI_PROXY_CONFIG"
-APP_DIR_NAME = "gemini-openai-proxy"
+APP_DIR_NAME = "gemini-web-to-openai-proxy"
 
 DEFAULTS: dict[str, Any] = {
     # Network

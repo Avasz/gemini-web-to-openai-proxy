@@ -10,7 +10,7 @@ from .config import load_config
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(prog="gemini-openai-proxy")
+    parser = argparse.ArgumentParser(prog="gemini-web-to-openai-proxy")
     parser.add_argument("-c", "--config", help="path to JSON config file")
     parser.add_argument("--host", help="override listen host")
     parser.add_argument("--port", type=int, help="override listen port")

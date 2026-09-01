@@ -49,7 +49,7 @@ def test_admin_page_basic_auth(client_factory):
         pw = _cred(c).password
         r = c.get("/admin", headers=_basic("admin", pw))
         assert r.status_code == 200
-        assert "gemini-openai-proxy" in r.text
+        assert "gemini-web-to-openai-proxy" in r.text
         assert "import cookies" in r.text.lower()
 
 
@@ -133,7 +133,7 @@ def test_root_api_index_no_auth(client_factory):
     with client_factory() as c:
         r = c.get("/", headers={"accept": "application/json"})
         assert r.status_code == 200
-        assert r.json()["name"] == "gemini-openai-proxy"
+        assert r.json()["name"] == "gemini-web-to-openai-proxy"
         assert r.json()["links"]["admin_dashboard"] == "/admin"
 
 
