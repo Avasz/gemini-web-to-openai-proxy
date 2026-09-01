@@ -178,6 +178,7 @@ h1, h2, h3 { font-weight: 500; }
 .usage-fill[data-lv="warn"] { background: var(--warn); }
 .usage-fill[data-lv="danger"] { background: var(--danger); }
 .usage-foot { display: flex; justify-content: space-between; font-family: var(--font-mono); font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; flex-wrap: wrap; gap: 4px; }
+.usage-empty { font-size: 12.5px; color: var(--muted); }
 
 /* ─── model tags ───────────────────────────────────────────────────── */
 .tags { display: flex; flex-wrap: wrap; gap: 5px; }

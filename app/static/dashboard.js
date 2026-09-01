@@ -40,17 +40,25 @@ const usageLevel = (pct) => (pct == null ? "neutral" : pct < 60 ? "neutral" : pc
 
 let uptimeBase = null, uptimeAt = 0;
 
-function renderUsage(usage, tierLabel) {
+function renderUsage(usage, tierLabel, health) {
   const card = $("usage-card"), body = $("usage-body");
+  card.hidden = false;                       // always visible
+  $("usage-tier").hidden = !tierLabel;
+  if (tierLabel) $("usage-tier").textContent = tierLabel;
+
   const windows = [];
   if (usage) {
     if (usage.current_5h) windows.push(["5-Hour Window", usage.current_5h]);
     if (usage.weekly) windows.push(["Weekly Window", usage.weekly]);
   }
-  if (!windows.length) { card.hidden = true; return; }
-  card.hidden = false;
-  $("usage-tier").hidden = !tierLabel;
-  if (tierLabel) $("usage-tier").textContent = tierLabel;
+  if (!windows.length) {
+    const why =
+      health && health.client_authenticated === false
+        ? "The client is not authenticated — quota is only reported for an authenticated account."
+        : "No quota windows reported yet.";
+    body.innerHTML = `<div class="usage"><div class="usage-empty">${why}</div></div>`;
+    return;
+  }
 
   body.innerHTML = windows.map(([name, w]) => {
     const pct = w.usage_percentage ?? 0;
@@ -73,7 +81,7 @@ function renderUsage(usage, tierLabel) {
   }).join("");
 }
 
-function render(d) {
+function renderInner(d) {
   $("version").textContent = "v" + (d.version || "–");
   uptimeBase = d.uptime_seconds; uptimeAt = Date.now();
   $("uptime").textContent = fmtUptime(uptimeBase);
@@ -142,7 +150,10 @@ function render(d) {
   $("w-lastimport").textContent = lastImp;
   $("ctx-last").textContent = lastImp;
 
-  renderUsage(d.usage, tier);
+  renderUsage(d.usage, tier, h);
+}
+function render(d) {
+  try { renderInner(d); } catch (e) { console.error("render failed", e); }
 }
 
 /* ─── polling + refresh bar ──────────────────────────────────────── */
