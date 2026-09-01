@@ -13,31 +13,6 @@ for session/protocol handling.
 
 **API reference:** [`docs/API.md`](docs/API.md)
 
-## Credits
-
-This project exists on top of [`gemini_webapi`](https://github.com/HanaokaYuzu/Gemini-API)
-by [HanaokaYuzu](https://github.com/HanaokaYuzu), which does the actual hard
-part: talking to Gemini Web's protocol, managing the authenticated session,
-rotating cookies, and parsing streamed responses. This project is, at its
-core, a FastAPI layer on top of that library, translating its interface
-into OpenAI-compatible and Google-native API shapes. None of this would
-exist without that library doing the real work underneath it.
-
-## Similar projects
-
-This isn't the first project bridging a free/consumer-facing chat frontend to an
-OpenAI-compatible API. A few others worth knowing about:
-
-- [Freebuff2API](https://github.com/Quorinex/Freebuff2API): same general idea,
-  for a different backend service (Freebuff, not Gemini).
-- [duckduckgo-ai-openai-api](https://github.com/NightOwlDev19/duckduckgo-ai-openai-api):
-  same idea, bridging DuckDuckGo's AI Chat instead.
-- [Sophomoresty/gemini-web2api](https://github.com/Sophomoresty/gemini-web2api):
-  same target (Gemini Web), same general idea.
-
-This project doesn't share code with any of the above. It's an independent
-implementation built on top of `gemini_webapi`.
-
 ---
 
 ## Features
@@ -50,7 +25,8 @@ implementation built on top of `gemini_webapi`.
 | **OpenAI** | `/v1/chat/completions` + `/v1/responses` (independent surfaces), streaming, multimodal in/out, prompt-engineered tool calling |
 | **Google-native** | `/v1beta` model list + `generateContent` + `streamGenerateContent` (`?alt=sse` or JSON array) |
 | **Images** | both directions: send an image with your prompt (by URL or inline base64), and get one back if Gemini's reply includes one (returned inline, base64-encoded, not just a link). MIME is sniffed from the file's actual bytes, not trusted from what you label it. See the image fields under [`POST /v1/chat/completions`](docs/API.md#post-v1chatcompletions) (OpenAI) or [`POST .../generateContent`](docs/API.md#post-v1betamodelsmodelgeneratecontent) (Google) in `docs/API.md` for the exact request/response shape. |
-| **Metadata** | every response carries `x_gemini_proxy`: the *validated* served model (not the model's self-claim), live quota |
+| **Metadata** | every response carries `x_gemini_proxy`: the *validated* served model (not the model's self-claim) plus other request-level detail |
+| **Credit / quota tracking** | when the account exposes it, live usage (`usage_info`/`quotas`) shows up in `x_gemini_proxy` on every response and as its own panel on the admin dashboard, no separate call needed. This comes straight from what `gemini_webapi` reads off the account; it's confirmed working on a Google AI Pro account, unconfirmed whether Google surfaces the same usage/credit data for free-tier accounts, if it doesn't, this field will simply be empty for you rather than erroring. |
 | **Reliability** | one shared connection, capped at `max_concurrent_generations`; over the cap gets a `503` and should be retried |
 | **Observability** | `/status`: three independent health signals plus a 24h request-history summary |
 | **Admin** | dashboard at `/` (or `/admin`) with hot cookie reload, own credential, separate from `api_keys`; see [Admin dashboard: username and password](#admin-dashboard-username-and-password) |
@@ -607,6 +583,33 @@ pytest                                 # fully offline (fake gemini client)
 python scripts/check_anonymous.py      # live: zero-credential guest session
 python scripts/check_cookies.py        # live: verify cookies.json per-model
 ```
+
+---
+
+## Credits
+
+This project exists on top of [`gemini_webapi`](https://github.com/HanaokaYuzu/Gemini-API)
+by [HanaokaYuzu](https://github.com/HanaokaYuzu), which does the actual hard
+part: talking to Gemini Web's protocol, managing the authenticated session,
+rotating cookies, and parsing streamed responses. This project is, at its
+core, a FastAPI layer on top of that library, translating its interface
+into OpenAI-compatible and Google-native API shapes. None of this would
+exist without that library doing the real work underneath it.
+
+## Similar projects
+
+This isn't the first project bridging a free/consumer-facing chat frontend to an
+OpenAI-compatible API. A few others worth knowing about:
+
+- [Freebuff2API](https://github.com/Quorinex/Freebuff2API): same general idea,
+  for a different backend service (Freebuff, not Gemini).
+- [duckduckgo-ai-openai-api](https://github.com/NightOwlDev19/duckduckgo-ai-openai-api):
+  same idea, bridging DuckDuckGo's AI Chat instead.
+- [Sophomoresty/gemini-web2api](https://github.com/Sophomoresty/gemini-web2api):
+  same target (Gemini Web), same general idea.
+
+This project doesn't share code with any of the above. It's an independent
+implementation built on top of `gemini_webapi`.
 
 ---
 
