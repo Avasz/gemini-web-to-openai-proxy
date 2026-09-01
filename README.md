@@ -91,6 +91,7 @@ Interactive API docs: `http://127.0.0.1:8000/docs` (provided by FastAPI).
 pytest                                    # unit tests, no network
 python scripts/check_anonymous.py         # live: zero-credential guest session
 python scripts/check_anonymous.py --prompt "say hi"
+python scripts/check_cookies.py           # verify cookies.json authenticates (per-model)
 ```
 
 ### Try the OpenAI API live

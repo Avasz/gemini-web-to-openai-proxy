@@ -110,8 +110,26 @@ __Secure-1PSID=g.a000…; __Secure-1PSIDTS=sidts-…; NID=…
 
 **4. Flat JSON object:** `{ "__Secure-1PSID": "…", "__Secure-1PSIDTS": "…" }`
 
+Verify an export before trusting it:
+
+```bash
+python scripts/check_cookies.py path/to/cookies.json
+```
+
+It prints the `__Secure-1PSID` fingerprint (so two exports can be told apart), the
+resolved account status, and per-model availability. A real authenticated session
+shows the non-default models as usable; a **GUEST / UNAUTHENTICATED** verdict
+means the export is the wrong account, an unprovisioned account (open Gemini in
+that browser and send one message first), or a device-bound Chromium export.
+
+Note: `__Secure-1PSID` belongs to the browser's **primary** Google account —
+switching accounts inside the Gemini web UI does not change it. Export from a
+browser/profile signed into **only** the account you want.
+
 The file is re-read automatically when its modification time or size changes — a
-fresh export is picked up on the next request, no restart needed. A file that
+fresh export is picked up on the next request, **but the already-initialized
+Gemini client is not rebuilt** until the process restarts (a hot reload endpoint
+arrives in Phase 8). A file that
 can't be parsed is logged and treated as "no cookies" rather than crashing.
 
 > `gemini_webapi` also keeps its own rotated-cookie cache under
