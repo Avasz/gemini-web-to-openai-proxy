@@ -107,14 +107,35 @@ async def get_model(
     raise HTTPException(status_code=404, detail=f"Model 'models/{name}' not found.")
 
 
+def _image_parts(result: GenerationResult) -> list[dict[str, Any]]:
+    """Generated images as native Google ``inlineData`` parts (SRS 2.5)."""
+    return [
+        {"inlineData": {"mimeType": img.mime_type, "data": img.data}}
+        for img in result.images
+    ]
+
+
+def _images_payload(result: GenerationResult) -> list[dict[str, Any]]:
+    return [
+        {"mimeType": img.mime_type, "data": img.data, "sourceUrl": img.source_url}
+        for img in result.images
+    ]
+
+
 def _generate_content_response(
     service: GeminiService, result: GenerationResult
 ) -> dict[str, Any]:
     completion_tokens = _rough_tokens(result.text)
-    return {
+    parts: list[dict[str, Any]] = []
+    if result.text:
+        parts.append({"text": result.text})
+    parts.extend(_image_parts(result))
+    if not parts:
+        parts.append({"text": ""})
+    payload: dict[str, Any] = {
         "candidates": [
             {
-                "content": {"role": "model", "parts": [{"text": result.text}]},
+                "content": {"role": "model", "parts": parts},
                 "finishReason": "STOP",
                 "index": 0,
             }
@@ -127,6 +148,9 @@ def _generate_content_response(
         "modelVersion": result.resolved.served_name,
         META_KEY: served_model_metadata(service, result),
     }
+    if result.images:
+        payload["images"] = _images_payload(result)
+    return payload
 
 
 def _chunk_response(text: str, served_name: str) -> dict[str, Any]:
@@ -183,10 +207,15 @@ async def _stream_google(
             yield "]"
         return
 
-    # Final chunk: finishReason + usage + served-model metadata
+    # Final chunk: finishReason + usage + served-model metadata (+ any images)
+    tail_parts = _image_parts(final) if final is not None else []
     tail: dict[str, Any] = {
         "candidates": [
-            {"content": {"role": "model", "parts": []}, "finishReason": "STOP", "index": 0}
+            {
+                "content": {"role": "model", "parts": tail_parts},
+                "finishReason": "STOP",
+                "index": 0,
+            }
         ],
         "modelVersion": served_name,
     }
@@ -198,6 +227,8 @@ async def _stream_google(
             "totalTokenCount": ct,
         }
         tail[META_KEY] = served_model_metadata(service, final)
+        if final.images:
+            tail["images"] = _images_payload(final)
     if not sse and not first:
         yield ","
     yield emit(tail)
@@ -236,10 +267,7 @@ async def generate(
         body.get("contents"), body.get("systemInstruction") or body.get("system_instruction")
     )
     if bundle.images:
-        logger.warning(
-            "Ignoring %d inline image part(s): multimodal input lands in Phase 4.",
-            len(bundle.images),
-        )
+        logger.info("attaching %d input image(s)", len(bundle.images))
     if body.get("tools"):
         logger.warning("Ignoring 'tools': native tool-calling lands in Phase 5.")
 

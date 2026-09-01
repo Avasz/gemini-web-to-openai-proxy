@@ -113,6 +113,8 @@ final chunk.
 | `cookie_mode` | `authenticated`, `anonymous`, or `anonymous(forced)` |
 | `chat_metadata` | Gemini conversation ids `[cid, rid, ...]` |
 | `usage_info` *or* `quotas` | live account usage/quota snapshot (whichever the library provides) |
+| `input_image_errors` | present only if one or more supplied images were skipped; a list of reasons |
+| `output_image_count` | present only if the reply produced images |
 
 > Trust `served_model` over anything the model says about its own identity in the
 > reply — models routinely misstate themselves.
@@ -227,7 +229,7 @@ Gemini Web exposes no equivalent knobs.
 | `role` | `system`, `user`, `assistant`, `tool`, `function`, `developer` (→ treated as system) |
 | `content` | a string, **or** an array of parts |
 | `content[]` text part | `{"type": "text", "text": "…"}` (also `input_text` / `output_text`, or any part with a `text` key) |
-| `content[]` image part | `{"type": "image_url", "image_url": {"url": "<http(s) or data: URL>", "detail": "…"}}` — **parsed and collected but not yet sent to Gemini** (Phase 4); a warning is logged |
+| `content[]` image part | `{"type": "image_url", "image_url": {"url": "<http(s) or data: URL>", "detail": "…"}}` — fetched/decoded server-side and attached to the prompt. MIME is sniffed from magic bytes (PNG, JPEG, GIF, WEBP, BMP, TIFF, AVIF, HEIC); a caller-supplied type is ignored. A single image that can't be fetched or recognized is skipped (not fatal) and listed under `x_gemini_proxy.input_image_errors`. |
 | `tool_calls` (assistant) | rendered into the prompt as a readable text trace |
 | `name` / `tool_call_id` (tool/function msg) | prefixed onto the content in the prompt trace |
 
@@ -260,6 +262,16 @@ preserving turn order.
 ```
 
 Token counts are `len(text) // 4` estimates — Gemini Web returns no token usage.
+
+**Image output.** If the reply contains generated/referenced images they are
+downloaded through the authenticated session and returned base64-encoded, both as
+a top-level `images` array and mirrored onto `choices[0].message.images`:
+
+```json
+"images": [
+  { "type": "image", "mime_type": "image/png", "data": "<base64>", "source_url": "https://…" }
+]
+```
 
 **Response `200` (streaming, `stream: true`):**
 
@@ -335,8 +347,8 @@ reasoning suffix, e.g. `models/gemini-pro-high:generateContent`).
 | `role` | `user` or `model` (also `function` / `tool` → "Tool result") |
 | `parts[]` | array of part objects |
 | text part | `{"text": "…"}` |
-| inline image | `{"inlineData": {"mimeType": "image/png", "data": "<base64>"}}` (snake_case `inline_data` also accepted) — collected, **not yet sent** to Gemini (Phase 4) |
-| file reference | `{"fileData": {"fileUri": "https://…"}}` — collected as an image ref |
+| inline image | `{"inlineData": {"mimeType": "image/png", "data": "<base64>"}}` (snake_case `inline_data` also accepted) — decoded and attached; MIME re-sniffed from magic bytes |
+| file reference | `{"fileData": {"fileUri": "https://…"}}` — fetched server-side and attached |
 | `functionCall` | `{"functionCall": {"name": "…", "args": {…}}}` — rendered as a text trace |
 | `functionResponse` | `{"functionResponse": {"name": "…", "response": {…}}}` — rendered as a text trace |
 
@@ -365,6 +377,10 @@ reasoning suffix, e.g. `models/gemini-pro-high:generateContent`).
 ```
 
 `candidatesTokenCount` is a rough estimate.
+
+**Image output.** Generated images appear as native `inlineData` parts inside
+`candidates[0].content.parts` **and** as a top-level `images` array
+(`[{"mimeType","data","sourceUrl"}]`).
 
 ---
 
@@ -447,8 +463,6 @@ credentials actually work. No auth (yet).
 
 | Feature | Phase |
 |---|---|
-| Image **input** actually sent to Gemini | 4 |
-| Image **output** (base64 in responses / `inlineData` parts) | 4 |
 | Native tool / function calling (both wire formats) | 5 |
 | `POST /v1/responses` (OpenAI Responses API) | 6 |
 | Local request history + 3-way `/status` health | 7 |

@@ -52,6 +52,19 @@ Phase 3 (Google-native parity) complete:
 - `force_anonymous` config option: ignore the cookie file *and* the library cache,
   disable auto-refresh — for verifying the credential-free path (SRS §7)
 
+Phase 4 (Multimodal) complete:
+
+- **Image input** — `image_url` (OpenAI) and `inlineData` / `fileData` (Google)
+  parts are fetched/decoded server-side, MIME sniffed from magic bytes (PNG, JPEG,
+  GIF, WEBP, BMP, TIFF, AVIF, HEIC), written to real temp files with the right
+  extension, and passed to Gemini (`app/media.py`)
+- a bad/unreachable image is skipped, not fatal, and reported in
+  `x_gemini_proxy.input_image_errors`
+- **Image output** — images in a reply are downloaded through the authenticated
+  session and returned base64 inline: a top-level `images` array on both APIs,
+  plus native `inlineData` parts on the Google path
+- config: `image_fetch_timeout`, `max_image_bytes`
+
 ## Setup
 
 ```bash

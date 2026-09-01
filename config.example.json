@@ -13,5 +13,7 @@
   "cookie_refresh_interval": 600.0,
   "activity_log_retention_days": 7,
   "warm_session_idle_timeout": 900.0,
+  "image_fetch_timeout": 20.0,
+  "max_image_bytes": 20971520,
   "data_dir": "data"
 }

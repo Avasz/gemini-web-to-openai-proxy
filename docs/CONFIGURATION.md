@@ -48,6 +48,8 @@ the current working directory.
 | `max_concurrent_generations` | integer | `3` | reserved | in-flight generation cap (Phase 9) |
 | `activity_log_retention_days` | integer | `7` | reserved | local request-history retention (Phase 7) |
 | `warm_session_idle_timeout` | number (s) | `900.0` | reserved | warm-session pruning (Phase 10) |
+| `image_fetch_timeout` | number (s) | `20.0` | active | per-image timeout when fetching a remote image URL for input |
+| `max_image_bytes` | integer | `20971520` (20 MiB) | active | max decoded size of a single input image; larger is rejected (that image only) |
 | `data_dir` | string (path) | `"data"` | active | directory for local state; currently holds the library's cookie cache (`{data_dir}/gemini_webapi`, or `{data_dir}/gemini_webapi_anon` when `force_anonymous`) |
 
 **Status:** *active* = read and applied today; *reserved* = accepted and

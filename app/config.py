@@ -49,6 +49,9 @@ DEFAULTS: dict[str, Any] = {
     "activity_log_retention_days": 7,
     # Warm-session idle timeout, in seconds (SRS 2.11)
     "warm_session_idle_timeout": 900.0,
+    # Image input (SRS 2.5)
+    "image_fetch_timeout": 20.0,
+    "max_image_bytes": 20971520,
     # Directory for local state (activity db, admin credential, library cookie cache)
     "data_dir": "data",
 }

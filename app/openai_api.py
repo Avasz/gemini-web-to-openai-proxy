@@ -44,6 +44,20 @@ def _rough_tokens(text: str) -> int:
     return max(1, len(text) // 4) if text else 0
 
 
+def _images_payload(result: GenerationResult) -> list[dict[str, Any]]:
+    """Generated/referenced images, base64-encoded directly in the response
+    (SRS 2.5) -- OpenAI has no native field, so this is a namespaced extension."""
+    return [
+        {
+            "type": "image",
+            "mime_type": img.mime_type,
+            "data": img.data,
+            "source_url": img.source_url,
+        }
+        for img in result.images
+    ]
+
+
 def _model_not_available(exc: ModelNotAvailable) -> JSONResponse:
     code = "model_unavailable" if exc.reason == "guest_tier" else "model_not_found"
     return JSONResponse(
@@ -93,18 +107,16 @@ def _build_completion(
 ) -> dict[str, Any]:
     prompt_meta = served_model_metadata(service, result)
     completion_tokens = _rough_tokens(result.text)
-    return {
+    images = _images_payload(result)
+    message: dict[str, Any] = {"role": "assistant", "content": result.text}
+    if images:
+        message["images"] = images
+    payload: dict[str, Any] = {
         "id": f"chatcmpl-{uuid.uuid4().hex}",
         "object": "chat.completion",
         "created": int(time.time()),
         "model": result.resolved.served_name,
-        "choices": [
-            {
-                "index": 0,
-                "message": {"role": "assistant", "content": result.text},
-                "finish_reason": "stop",
-            }
-        ],
+        "choices": [{"index": 0, "message": message, "finish_reason": "stop"}],
         "usage": {
             "prompt_tokens": 0,
             "completion_tokens": completion_tokens,
@@ -113,6 +125,9 @@ def _build_completion(
         },
         META_KEY: prompt_meta,
     }
+    if images:
+        payload["images"] = images
+    return payload
 
 
 async def _chat_stream(
@@ -164,6 +179,9 @@ async def _chat_stream(
     extra = None
     if final_result is not None:
         extra = {META_KEY: served_model_metadata(service, final_result)}
+        images = _images_payload(final_result)
+        if images:
+            extra["images"] = images
     yield frame({}, "stop", extra)
     yield "data: [DONE]\n\n"
 
@@ -191,10 +209,7 @@ async def chat_completions(
 
     bundle = messages_to_prompt(messages)
     if bundle.images:
-        logger.warning(
-            "Ignoring %d image part(s): multimodal input lands in Phase 4.",
-            len(bundle.images),
-        )
+        logger.info("attaching %d input image(s)", len(bundle.images))
     if body.get("tools"):
         logger.warning("Ignoring 'tools': native tool-calling lands in Phase 5.")
 
