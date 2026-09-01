@@ -57,6 +57,10 @@ implementation built on top of `gemini_webapi`.
 | **Temporary chat** | per-request / config default; keeps the chat out of Google's account history |
 | **Warm sessions** | opt-in `/v1/sessions`, reuse an established conversation instead of paying per-request setup cost (experimental, not yet benchmarked in this deployment) |
 
+The admin dashboard, at a glance:
+
+![Admin dashboard](docs/images/admin-dashboard-overview.png)
+
 ---
 
 ## Quick start
@@ -310,6 +314,8 @@ your cookie export into the import form there. This writes the cookies
 straight into `cookie_file` (`cookies.json` by default) for you and reloads
 the session immediately, no restart needed.
 
+![Import cookies dialog](docs/images/admin-import-cookies.png)
+
 **If the web UI isn't reachable** (headless server, internal-only deployment,
 no browser access to the machine), write the file yourself: put your export
 directly at the path named by `cookie_file` in `config.json` (`./cookies.json`
@@ -321,6 +327,33 @@ Either way, the two cookies that actually carry a session are `__Secure-1PSID`
 `accounts.google.com`. Recommended: export from **Firefox**. Chromium-based
 browsers (Chrome, Edge, Brave) can bind an exported session to the device so
 it dies within hours.
+
+#### How to actually export your cookies
+
+This trips people up, so it's worth spelling out: **you need to export
+cookies from `google.com`, not from `gemini.google.com`.** Most browser
+cookie-export extensions only grab cookies for whatever site is open in the
+current tab. If you export while sitting on `gemini.google.com`, you'll
+often miss cookies that only ever get set on the wider `google.com` domain
+(and the session-refresh path specifically needs those, since it talks to
+`accounts.google.com`, not `gemini.google.com`).
+
+1. Sign in to your Google account in the browser, if you aren't already.
+2. Open a new tab and go to **`https://google.com`** (the plain domain,
+   not Gemini) and let it fully load.
+3. With that tab active, run your cookie-export extension and export
+   cookies **for that tab/domain**, not for a `gemini.google.com` tab.
+4. Paste the result into the admin dashboard's import form, or save it to
+   your `cookie_file` as described above.
+
+Two extensions that do this well (mentioned for convenience only, **not an
+endorsement or affiliation, use at your own judgment**):
+
+- Firefox: [Instant Cookie Exporter](https://addons.mozilla.org/en-US/firefox/addon/instant-cookie-exporter/)
+- Chrome/Chromium: [Cookie-Editor](https://chromewebstore.google.com/detail/cookie-editor/ookdjilphngeeeghgngjabigmpepanpl)
+
+Either one will export in the JSON array format shown above, which this
+service reads directly.
 
 Accepted formats when writing the file yourself (auto-detected, you don't
 declare which):
@@ -351,6 +384,11 @@ the resolved account status, and per-model availability. A **GUEST /
 UNAUTHENTICATED** verdict means the export is the wrong account, an
 unprovisioned account (open Gemini in that browser and send one message
 first), or a device-bound Chromium export.
+
+You can confirm the same thing visually on the admin dashboard, `Valid`
+next to "Account & Auth" means the cookies were accepted:
+
+![Account & Auth panel showing a valid, authenticated session](docs/images/admin-account-auth.png)
 
 > `__Secure-1PSID` belongs to the browser's **primary** Google account;
 > switching accounts inside the Gemini web UI does not change it. Export from a
@@ -481,6 +519,11 @@ If you missed the banner or don't want to hunt down the file, open
 password), or set `ADMIN_PASSWORD` yourself in `.env` and restart so you
 always know what it is going forward.
 
+Once logged in, the dashboard also shows your account's live quota, no
+need to guess how much you've used:
+
+![Quota & Usage panel](docs/images/admin-quota-usage.png)
+
 ---
 
 ## Deployment
@@ -549,6 +592,11 @@ nginx) and a long read timeout; Gemini generations can take minutes (see
 - Gemini generations can stall for minutes; "succeeded server-side" is not the
   same as "client still connected". Use generous client timeouts, or prefer
   non-streaming with a retry.
+
+The same request history behind that error-rate check is visible on the
+dashboard too:
+
+![Activity panel showing recent request counts and latency](docs/images/admin-activity.png)
 
 ---
 
