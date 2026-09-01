@@ -557,24 +557,51 @@ The image runs `uvicorn app.main:app` on port 8085 and reads:
 directory (`./gwop-data`).** If it's lost on a container recreate, the service
 falls back to the (now stale) cookie file and the session degrades.
 
-**docker compose (prebuilt image from GHCR):**
+**Quick start (prebuilt image, no clone):**
+
+```bash
+mkdir gemini-web-to-openai-proxy && cd gemini-web-to-openai-proxy
+curl -fsSL https://raw.githubusercontent.com/Avasz/gemini-web-to-openai-proxy/main/docker-compose.yml -o docker-compose.yml
+docker compose up -d
+```
+
+That's it. The proxy is now on `http://localhost:8085` and starts in guest mode
+(default model only, no cookies needed).
+
+Next:
+
+1. Get the generated admin password:
+   ```bash
+   docker compose logs | grep -A4 "ADMIN DASHBOARD"
+   ```
+   (or pin your own — see below)
+2. Open **`http://localhost:8085/admin`**, log in with that password.
+3. Paste your Gemini cookie export in **Import Cookies** to unlock the full
+   models and higher quota. See [How to actually export your cookies](#how-to-actually-export-your-cookies).
+4. Point your OpenAI client at `http://localhost:8085/v1`. If you set
+   `api_keys` in the config, send one of those as the API key; otherwise any
+   value works.
+
+Optional `config.json` / `cookies.json` (instead of pasting cookies in the UI):
 
 ```bash
 mkdir -p deploy/config
-cp config.example.json deploy/config/config.json
-# add deploy/config/cookies.json
-docker compose up -d          # pulls ghcr.io/avasz/gemini-web-to-openai-proxy
-docker compose logs | grep -A4 "ADMIN DASHBOARD"   # the generated admin password
-```
-
-**docker compose (build from source):**
-
-```bash
-docker compose -f docker-compose.dev.yml up -d --build
+curl -fsSL https://raw.githubusercontent.com/Avasz/gemini-web-to-openai-proxy/main/config.example.json -o deploy/config/config.json
+# drop your cookie export at deploy/config/cookies.json, then:
+docker compose up -d
 ```
 
 Pin the admin password instead of using the generated one by setting
-`ADMIN_PASSWORD` in the compose file (or an `.env` file next to it).
+`ADMIN_PASSWORD` in `docker-compose.yml` (or an `.env` file next to it), then
+`docker compose up -d`.
+
+**Build from source instead of pulling:**
+
+```bash
+git clone https://github.com/Avasz/gemini-web-to-openai-proxy
+cd gemini-web-to-openai-proxy
+docker compose -f docker-compose.dev.yml up -d --build
+```
 
 **plain docker:**
 
