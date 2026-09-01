@@ -7,13 +7,13 @@ from app.main import create_app
 
 
 class FakeModel:
-    def __init__(self, name, model_id, aliases=None):
+    def __init__(self, name, model_id, aliases=None, is_available=True):
         self.model_name = name
         self.model_id = model_id
         self.display_name = name.title()
         self.description = f"fake {name}"
         self.aliases = aliases or []
-        self.is_available = True
+        self.is_available = is_available
 
 
 class FakeOutput:
@@ -35,6 +35,7 @@ class FakeClient:
         self.access_token = "tok"
         self._running = True
         self.calls = []
+        self.raise_on_generate = None
 
     def list_models(self):
         return list(self._models)
@@ -51,6 +52,8 @@ class FakeClient:
             {"prompt": prompt, "model": getattr(model, "model_name", model),
              "temporary": temporary, "extended_thinking": extended_thinking}
         )
+        if self.raise_on_generate is not None:
+            raise self.raise_on_generate
         return FakeOutput(f"echo: {prompt[:40]}")
 
     async def generate_content_stream(self, prompt, model=None, temporary=False,

@@ -24,6 +24,7 @@ from .generation import (
     served_model_metadata,
     stream_generation,
 )
+from .errors import UpstreamError
 from .gemini_service import GeminiService
 from .model_selection import ModelNotAvailable
 from .translation import messages_to_prompt
@@ -44,6 +45,7 @@ def _rough_tokens(text: str) -> int:
 
 
 def _model_not_available(exc: ModelNotAvailable) -> JSONResponse:
+    code = "model_unavailable" if exc.reason == "guest_tier" else "model_not_found"
     return JSONResponse(
         status_code=400,
         content={
@@ -51,7 +53,7 @@ def _model_not_available(exc: ModelNotAvailable) -> JSONResponse:
                 "message": str(exc),
                 "type": "invalid_request_error",
                 "param": "model",
-                "code": "model_not_found",
+                "code": code,
                 "available_models": exc.available,
             }
         },
@@ -143,12 +145,19 @@ async def _chat_stream(
             if delta_text:
                 yield frame({"content": delta_text}, None)
     except ModelNotAvailable as exc:
-        yield f"data: {json.dumps({'error': {'message': str(exc), 'code': 'model_not_found', 'available_models': exc.available}})}\n\n"
+        logger.warning("stream rejected: %s", exc)
+        _code = "model_unavailable" if exc.reason == "guest_tier" else "model_not_found"
+        yield f"data: {json.dumps({'error': {'message': str(exc), 'code': _code, 'available_models': exc.available}})}\n\n"
+        yield "data: [DONE]\n\n"
+        return
+    except UpstreamError as exc:
+        logger.warning("stream upstream error [%s]: %s", exc.code, exc.message)
+        yield f"data: {json.dumps({'error': {'message': exc.message, 'type': 'upstream_error', 'code': exc.code}})}\n\n"
         yield "data: [DONE]\n\n"
         return
     except Exception as exc:  # noqa: BLE001
-        logger.exception("streaming generation failed")
-        yield f"data: {json.dumps({'error': {'message': str(exc), 'type': 'upstream_error'}})}\n\n"
+        logger.exception("streaming generation failed unexpectedly")
+        yield f"data: {json.dumps({'error': {'message': str(exc), 'type': 'internal_error'}})}\n\n"
         yield "data: [DONE]\n\n"
         return
 
@@ -200,9 +209,16 @@ async def chat_completions(
             service, requested_model, bundle, temporary=temporary
         )
     except ModelNotAvailable as exc:
+        logger.warning("request rejected: %s", exc)
         return _model_not_available(exc)
+    except UpstreamError as exc:
+        logger.warning("upstream error [%s]: %s", exc.code, exc.message)
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={"error": {"message": exc.message, "type": "upstream_error", "code": exc.code}},
+        )
     except Exception as exc:  # noqa: BLE001
-        logger.exception("generation failed")
-        raise HTTPException(status_code=502, detail=f"Upstream Gemini error: {exc}")
+        logger.exception("generation failed unexpectedly")
+        raise HTTPException(status_code=502, detail=f"Unexpected error: {exc}")
 
     return _build_completion(service, requested_model, result)

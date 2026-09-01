@@ -33,12 +33,19 @@ _REASONING_SUFFIXES = {
 
 
 class ModelNotAvailable(ValueError):
-    def __init__(self, requested: str, available: list[str]):
+    def __init__(self, requested: str, available: list[str], *, reason: str = "unknown"):
         self.requested = requested
         self.available = available
+        self.reason = reason
+        if reason == "guest_tier":
+            lead = (
+                f"Model '{requested}' requires an authenticated account; the current "
+                f"session is anonymous/guest and can only use"
+            )
+        else:
+            lead = f"Unknown model '{requested}'. Models available to this account:"
         super().__init__(
-            f"Unknown model '{requested}'. Available models for this account: "
-            f"{', '.join(available) if available else '(none discovered yet)'}"
+            f"{lead} {', '.join(available) if available else '(none discovered yet)'}."
         )
 
 

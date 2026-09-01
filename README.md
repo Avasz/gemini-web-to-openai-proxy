@@ -26,6 +26,10 @@ Phase 2 (Core OpenAI-compatible chat) complete:
 - Every response carries `x_gemini_proxy` metadata: the validated served model
   (never the model's self-claim), model id, cookie mode, and live account usage
 - Per-endpoint API-key auth, separate from the (future) admin credential (`app/auth.py`)
+- Upstream failures (guest-tier model, expired session, usage cap, timeout) are
+  classified into clean client errors with sensible status codes and logged at
+  WARNING without a stack trace (`app/errors.py`); a non-default model on a guest
+  session is rejected before the network call
 
 ## Setup
 

@@ -11,8 +11,11 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any, AsyncIterator
 
+from gemini_webapi.exceptions import GeminiError
+
+from .errors import UpstreamError, classify_upstream
 from .gemini_service import GeminiService
-from .model_selection import ResolvedModel, resolve
+from .model_selection import ModelNotAvailable, ResolvedModel, available_model_names, resolve
 from .translation import PromptBundle
 
 logger = logging.getLogger("gemini_proxy.generation")
@@ -57,7 +60,18 @@ def served_model_metadata(
 
 async def _resolve(service: GeminiService, requested: str) -> tuple[Any, ResolvedModel]:
     client = await service.get_client()
-    return client, resolve(client, requested)
+    resolved = resolve(client, requested)
+    # Fail before the network call when the account plainly can't use this model
+    # (e.g. a non-default model on a guest session). Same signal the library would
+    # raise GeminiError on, surfaced as a clean 4xx instead of a traceback.
+    if not resolved.model.is_available:
+        usable = [
+            m.model_name for m in (client.list_models() or []) if m.is_available
+        ]
+        raise ModelNotAvailable(
+            requested, usable or available_model_names(client), reason="guest_tier"
+        )
+    return client, resolved
 
 
 async def run_generation(
@@ -68,12 +82,15 @@ async def run_generation(
     temporary: bool,
 ) -> GenerationResult:
     client, resolved = await _resolve(service, requested_model)
-    output = await client.generate_content(
-        bundle.prompt,
-        model=resolved.model,
-        temporary=temporary,
-        extended_thinking=resolved.extended_thinking,
-    )
+    try:
+        output = await client.generate_content(
+            bundle.prompt,
+            model=resolved.model,
+            temporary=temporary,
+            extended_thinking=resolved.extended_thinking,
+        )
+    except GeminiError as exc:
+        raise classify_upstream(exc) from exc
     return GenerationResult(
         text=output.text or "",
         resolved=resolved,
@@ -94,25 +111,30 @@ async def stream_generation(
     client, resolved = await _resolve(service, requested_model)
     last_full = ""
     final: GenerationResult | None = None
-    async for output in client.generate_content_stream(
-        bundle.prompt,
-        model=resolved.model,
-        temporary=temporary,
-        extended_thinking=resolved.extended_thinking,
-    ):
-        full = output.text or ""
-        delta = output.text_delta or ""
-        if not delta and len(full) > len(last_full):
-            delta = full[len(last_full) :]
-        last_full = full if len(full) >= len(last_full) else last_full
-        final = GenerationResult(
-            text=last_full,
-            resolved=resolved,
-            chat_metadata=list(output.metadata or []),
-            images=list(getattr(output, "images", []) or []),
+    try:
+        stream = client.generate_content_stream(
+            bundle.prompt,
+            model=resolved.model,
+            temporary=temporary,
+            extended_thinking=resolved.extended_thinking,
         )
-        if delta:
-            yield delta, final
+        async for output in stream:
+            full = output.text or ""
+            delta = output.text_delta or ""
+            if not delta and len(full) > len(last_full):
+                delta = full[len(last_full) :]
+            if len(full) >= len(last_full):
+                last_full = full
+            final = GenerationResult(
+                text=last_full,
+                resolved=resolved,
+                chat_metadata=list(output.metadata or []),
+                images=list(getattr(output, "images", []) or []),
+            )
+            if delta:
+                yield delta, final
+    except GeminiError as exc:
+        raise classify_upstream(exc) from exc
     if final is None:
         final = GenerationResult(text="", resolved=resolved)
     yield "", final
