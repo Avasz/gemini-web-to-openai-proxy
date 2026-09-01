@@ -12,6 +12,8 @@ cookies.txt
 *.cookies.json
 admin_credential
 data/
+gwop-data/
+gop-data/
 *.db
 
 # deployment

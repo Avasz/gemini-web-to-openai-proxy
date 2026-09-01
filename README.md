@@ -545,7 +545,7 @@ need to guess how much you've used:
 
 ### Docker
 
-The image runs `uvicorn app.main:app` on port 8000 and reads:
+The image runs `uvicorn app.main:app` on port 8085 and reads:
 
 | Path | Contents | Mode |
 |---|---|---|
@@ -553,30 +553,36 @@ The image runs `uvicorn app.main:app` on port 8000 and reads:
 | `/config/cookies.json` | your cookie export (`cookie_file` points here) | read |
 | `/data` | rotated-cookie cache, `activity.db`, `admin_credential` | **read/write, must persist** |
 
-`data_dir` defaults to `/data` in the image. **Mount `/data` as a named
-volume.** If it's lost on a container recreate, the service falls back to the
-(now stale) cookie file and the session degrades.
+`data_dir` defaults to `/data` in the image. **Bind-mount `/data` to a host
+directory (`./gwop-data`).** If it's lost on a container recreate, the service
+falls back to the (now stale) cookie file and the session degrades.
 
-**docker compose:**
+**docker compose (prebuilt image from GHCR):**
 
 ```bash
 mkdir -p deploy/config
 cp config.example.json deploy/config/config.json
 # add deploy/config/cookies.json
-docker compose up -d --build
+docker compose up -d          # pulls ghcr.io/avasz/gemini-web-to-openai-proxy
 docker compose logs | grep -A4 "ADMIN DASHBOARD"   # the generated admin password
 ```
 
+**docker compose (build from source):**
+
+```bash
+docker compose -f docker-compose.dev.yml up -d --build
+```
+
 Pin the admin password instead of using the generated one by setting
-`ADMIN_PASSWORD` in `docker-compose.yml` (or an `.env` file next to it).
+`ADMIN_PASSWORD` in the compose file (or an `.env` file next to it).
 
 **plain docker:**
 
 ```bash
 docker build -t gemini-web-to-openai-proxy .
-docker run -d --name gop -p 8000:8000 \
+docker run -d --name gop -p 8085:8085 \
   -v "$PWD/deploy/config:/config" \
-  -v gop-data:/data \
+  -v "$PWD/gwop-data:/data" \
   -e ADMIN_PASSWORD=change-me \
   gemini-web-to-openai-proxy
 ```

@@ -1,8 +1,9 @@
 services:
   gemini-web-to-openai-proxy:
-    # Prebuilt image from GitHub Container Registry.
-    # Building from source? Use docker-compose.dev.yml instead.
-    image: ghcr.io/avasz/gemini-web-to-openai-proxy:latest
+    # Build the image locally from this checkout.
+    #   docker compose -f docker-compose.dev.yml up -d --build
+    build: .
+    image: gemini-web-to-openai-proxy:dev
     restart: unless-stopped
     ports:
       - "8085:8085"
