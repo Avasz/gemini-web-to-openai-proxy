@@ -79,7 +79,8 @@ Phase 5 (tool / function calling) complete:
 - prior `tool_calls` / `tool` messages are rendered back into the prompt so the
   model sees tool results on the next turn
 - **caveat:** whether Gemini emits a call vs. answering inline is not guaranteed
-  even with `tool_choice: required` — prompt-engineered, not native
+  even with `tool_choice: required` — prompt-engineered, not native. Compliance
+  tuning is deferred (`docs/BACKLOG.md`); the parse/shape path is complete.
 
 ## Setup
 
