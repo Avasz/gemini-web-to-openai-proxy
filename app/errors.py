@@ -47,9 +47,13 @@ def classify_upstream(exc: Exception) -> UpstreamError:
         )
     if isinstance(exc, (AuthError,)) or "unauthenticated" in lowered or "cookies have expired" in lowered:
         return UpstreamError(
-            "Gemini session is not authenticated (no valid cookies). This model needs "
-            "an authenticated account; guest sessions can only use the default model. "
-            "Import fresh cookies and retry.",
+            "Gemini reports the session is not fully authenticated "
+            "(account status not AVAILABLE). While in this state: non-default models "
+            "and file/image uploads are refused; plain-text requests to the default "
+            "model may still work. Causes: expired/wrong-account cookies, an "
+            "unprovisioned account, or a temporary auth throttle from repeated "
+            "re-initialisation -- if cookies are known good, wait and retry cold "
+            "rather than restarting.",
             403,
             "session_unauthenticated",
         )
