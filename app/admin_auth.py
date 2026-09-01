@@ -24,7 +24,9 @@ import secrets
 import stat
 from pathlib import Path
 
-from fastapi import HTTPException, Request, status
+from fastapi import HTTPException, Request, Response, status
+
+_COOKIE = "gop_admin"
 
 logger = logging.getLogger("gemini_proxy.admin")
 
@@ -94,16 +96,19 @@ def _basic_auth(header: str | None) -> tuple[str, str] | None:
 
 
 async def require_admin(request: Request) -> None:
+    """Accepts HTTP Basic, ``X-Admin-Password`` / ``X-Admin-Key`` header,
+    ``?admin_key=`` query param, or the ``gop_admin`` session cookie."""
     cred: AdminCredential = request.app.state.admin_credential
+
+    cookie = request.cookies.get(_COOKIE)
+    if cookie and cred.check(None, cookie):
+        return
 
     basic = _basic_auth(request.headers.get("authorization"))
     if basic and cred.check(basic[0], basic[1]):
         return
 
-    header_pw = (
-        request.headers.get("x-admin-password")
-        or request.headers.get("x-admin-key")
-    )
+    header_pw = request.headers.get("x-admin-password") or request.headers.get("x-admin-key")
     if header_pw and cred.check(None, header_pw.strip()):
         return
 
@@ -117,3 +122,15 @@ async def require_admin(request: Request) -> None:
         detail="Admin authentication required.",
         headers={"WWW-Authenticate": 'Basic realm="gemini-openai-proxy admin"'},
     )
+
+
+def attach_admin_session(response: Response, request: Request) -> Response:
+    """Set the ``gop_admin`` session cookie so the dashboard's XHRs (which send
+    no auth header) stay authenticated after the first page load."""
+    cred: AdminCredential = request.app.state.admin_credential
+    response.set_cookie(
+        _COOKIE, cred.password, max_age=86400,
+        httponly=True, samesite="strict",
+        secure=request.url.scheme == "https",
+    )
+    return response

@@ -59,7 +59,7 @@ print(c.chat.completions.create(model="gemini-flash",
 | **Metadata** | every response carries `x_gemini_proxy` — the *validated* served model (not the model's self-claim), live quota |
 | **Reliability** | one shared connection, capped at `max_concurrent_generations` (SRS 2.8); over the cap → `503`, retry |
 | **Observability** | `/status` — three independent health signals + a 24h request-history summary (`data_dir/activity.db`) |
-| **Admin** | `/admin` dashboard + hot cookie reload (`POST /admin/cookies`), own credential, separate from `api_keys` |
+| **Admin** | dashboard at `/` (or `/admin`) + hot cookie reload, own credential, separate from `api_keys`; front end is static (`app/static/`) — swap it, the JSON contract stays |
 | **Temporary chat** | per-request / config default; keeps the chat out of Google's account history |
 | **Warm sessions** | opt-in `/v1/sessions` — **experimental**, see `docs/BACKLOG.md` |
 

@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>gemini-openai-proxy · admin</title>
+<link rel="stylesheet" href="/static/dashboard.css">
+</head>
+<body>
+<div class="shell">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="logo">G</div>
+      <div>
+        <div class="brand-name">gemini&#8288;-openai&#8288;-proxy</div>
+        <div class="brand-sub" id="version">v–</div>
+      </div>
+    </div>
+    <nav>
+      <a href="#overview" class="nav-item active">Overview</a>
+      <a href="#activity" class="nav-item">Activity</a>
+      <a href="#models" class="nav-item">Models</a>
+      <button class="nav-item" id="open-import">Import cookies</button>
+    </nav>
+    <div class="sidebar-foot">
+      <div class="meta">uptime <span id="uptime">–</span></div>
+      <div class="meta">refresh in <span id="countdown">30</span>s</div>
+      <button class="ghost" id="theme-toggle">Toggle theme</button>
+    </div>
+  </aside>
+
+  <main class="main">
+    <header class="page-head">
+      <h1>Dashboard</h1>
+      <span class="tier" id="tier" hidden></span>
+    </header>
+
+    <section class="banner" id="banner" data-status="unknown">
+      <div class="banner-dot"></div>
+      <div><strong id="banner-title">Loading…</strong><span id="banner-text"></span></div>
+    </section>
+
+    <div id="overview" class="grid">
+      <section class="card">
+        <h2>Account &amp; auth</h2>
+        <dl class="kv">
+          <dt>Overall</dt><dd><span class="pill" id="s-overall">–</span></dd>
+          <dt>Page reachable</dt><dd><span class="pill" id="s-page">–</span></dd>
+          <dt>Client authenticated</dt><dd><span class="pill" id="s-auth">–</span></dd>
+          <dt>Account status</dt><dd><span class="pill" id="s-acct">–</span></dd>
+          <dt>Cookie mode</dt><dd id="s-mode" class="mono">–</dd>
+          <dt>Cookie source</dt><dd id="s-source" class="mono">–</dd>
+          <dt>Init error</dt><dd id="s-error" class="mono dim">–</dd>
+        </dl>
+      </section>
+
+      <section class="card">
+        <h2>Capacity</h2>
+        <dl class="kv">
+          <dt>Concurrency limit</dt><dd id="c-limit" class="mono">–</dd>
+          <dt>In flight</dt><dd id="c-inflight" class="mono">–</dd>
+          <dt>Waiting for a slot</dt><dd id="c-waiting" class="mono">–</dd>
+          <dt>Rejected (503) total</dt><dd id="c-rejected" class="mono">–</dd>
+          <dt>Warm sessions</dt><dd id="c-warm" class="mono">–</dd>
+        </dl>
+      </section>
+
+      <section class="card wide" id="usage-card" hidden>
+        <h2>Quota &amp; usage</h2>
+        <div id="usage-body"></div>
+      </section>
+
+      <section class="card wide" id="activity">
+        <h2>Activity <span class="dim">· last 24h</span></h2>
+        <div class="metrics">
+          <div class="metric"><b id="a-total">–</b><span>requests</span></div>
+          <div class="metric"><b id="a-errors">–</b><span>errors</span><small id="a-rate"></small></div>
+          <div class="metric"><b id="a-latency">–</b><span>avg latency</span></div>
+          <div class="metric"><b id="a-last">–</b><span>since last</span></div>
+        </div>
+        <div class="chips" id="a-bymodel"></div>
+      </section>
+
+      <section class="card wide" id="models">
+        <h2>Models</h2>
+        <div class="chips" id="model-list"><span class="dim">–</span></div>
+      </section>
+    </div>
+    <p class="foot"><a href="/status">/status →</a> · <a href="/docs">/docs →</a></p>
+  </main>
+</div>
+
+<div class="modal" id="import-modal" hidden>
+  <div class="modal-box">
+    <div class="modal-head"><strong>Import cookies</strong><button id="close-import" class="ghost">✕</button></div>
+    <p class="dim">Paste a cookie export — a JSON array of <code>{name, value}</code> objects, a
+      <code>{"cookie": "…"}</code> object, or a raw <code>name=value; …</code> string. Export the whole
+      <code>google.com</code> set. Applied immediately; the client is rebuilt with no restart.</p>
+    <textarea id="cookie-text" spellcheck="false" placeholder='[{"name": "__Secure-1PSID", "value": "…"}, …]'></textarea>
+    <div class="modal-actions">
+      <span id="import-result"></span>
+      <button id="submit-import" class="primary">Apply</button>
+    </div>
+  </div>
+</div>
+
+<script src="/static/dashboard.js"></script>
+</body>
+</html>

@@ -56,9 +56,10 @@ are the solid path; sessions are strictly opt-in and don't affect them.
 `Dockerfile` + `docker-compose.yml` + `docs/DEPLOYMENT.md`, `/data` volume for the
 rotated-cookie cache / activity.db / admin_credential. Built and smoke-tested.
 
-## Admin dashboard UI (Phase 8)
+## ~~Admin dashboard UI~~ — reworked
 
-`app/admin.py` serves a minimal built-in HTML page. The operator has their own UI
-to drop in later. The JSON contract is stable — `/admin/status.json`,
-`POST /admin/cookies`, and the admin-auth forms — so a replacement front end only
-needs to talk to those; `GET /admin` (the HTML) is the only thing that changes.
+Now a static client-rendered page in `app/static/` (`index.html` + `dashboard.css`
++ `dashboard.js`), polling `/admin/status.json`. Served at `/admin` and at `/`
+(for `Accept: text/html`). To drop in a different front end, replace `app/static/`
+— the JSON contract (`/admin/status.json`, `POST /admin/cookies`, the auth forms,
+the `gop_admin` cookie) is stable.

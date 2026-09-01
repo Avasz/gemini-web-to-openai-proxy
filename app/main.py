@@ -4,14 +4,17 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 from . import __version__
 from .activity_log import ActivityLog
-from .admin import router as admin_router
-from .admin_auth import resolve_admin_credential
+from .admin import STATIC_DIR, router as admin_router
+from .admin_auth import attach_admin_session, require_admin, resolve_admin_credential
 from .concurrency import GenerationGate
 from .config import Config, load_config
 from .cookie_watcher import CookieWatcher
@@ -19,10 +22,10 @@ from .cookies import CookieStore
 from .dotenv import load_dotenv
 from .gemini_service import GeminiService
 from .google_api import router as google_router
-from .health import build_health
 from .openai_api import router as openai_router
 from .responses_api import router as responses_router
 from .sessions_api import router as sessions_router
+from .status_report import build_full_status
 from .warm_sessions import WarmSessionManager
 
 logging.basicConfig(
@@ -95,12 +98,36 @@ def create_app(config: Config | None = None) -> FastAPI:
     app.state.activity = activity
     app.state.admin_credential = admin_credential
     app.state.warm_sessions = warm_sessions
+    app.state.started_at = time.time()
 
+    app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
     app.include_router(openai_router)
     app.include_router(responses_router)
     app.include_router(google_router)
     app.include_router(sessions_router)
     app.include_router(admin_router)
+
+    @app.get("/", include_in_schema=False)
+    async def root(request: Request):
+        """Browsers get the admin dashboard (behind the admin credential);
+        everything else gets an unauthenticated API index."""
+        if "text/html" in request.headers.get("accept", ""):
+            await require_admin(request)
+            return attach_admin_session(
+                FileResponse(STATIC_DIR / "index.html", media_type="text/html"), request
+            )
+        return {
+            "name": "gemini-openai-proxy",
+            "version": __version__,
+            "links": {
+                "openapi_docs": "/docs",
+                "health": "/status",
+                "liveness": "/healthz",
+                "admin_dashboard": "/admin",
+                "openai_base_url": "/v1",
+                "google_base_url": "/v1beta",
+            },
+        }
 
     @app.get("/healthz")
     async def healthz() -> dict:
@@ -109,21 +136,9 @@ def create_app(config: Config | None = None) -> FastAPI:
 
     @app.get("/status")
     async def status() -> dict:
-        """Machine-readable health (SRS 2.7): three independent signals plus the
-        local request-history summary. Attempts a lazy client init so the report
-        reflects whether the configured credentials actually work."""
-        try:
-            await gemini.get_client()
-        except Exception:  # noqa: BLE001 - detail is in the snapshot / health
-            pass
-        return {
-            "version": __version__,
-            "config_source": str(cfg.source_path) if cfg.source_path else "defaults",
-            "health": await build_health(gemini, activity),
-            "gemini": await gemini.status_snapshot(),
-            "capacity": gemini.gate.stats() if gemini.gate else None,
-            "activity": await activity.summary(24.0),
-        }
+        """Machine-readable health (SRS 2.7), no auth: the three independent
+        signals plus the request-history summary and live model/quota info."""
+        return await build_full_status(app)
 
     return app
 

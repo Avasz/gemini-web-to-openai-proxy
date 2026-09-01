@@ -603,12 +603,16 @@ logged at startup. Username is `admin_username` (default `admin`).
 - HTTP Basic `Authorization: Basic base64(admin:<pw>)` (browser prompt)
 - `X-Admin-Password` or `X-Admin-Key` header
 - `?admin_key=<pw>` / `?admin_password=<pw>` query param
+- the `gop_admin` session cookie, set automatically after any of the above
+  succeeds so the dashboard's own XHRs stay authenticated (`SameSite=Strict`,
+  `HttpOnly`, 24h)
 
 | Endpoint | Notes |
 |---|---|
-| `GET /admin` | HTML dashboard: health signals + 24h activity, and a textarea to paste a cookie export |
+| `GET /` | with `Accept: text/html` → the dashboard (admin-gated); otherwise an unauthenticated JSON index (`{name, version, links}`) |
+| `GET /admin` | the dashboard — a static client-rendered page (`app/static/`) that polls `/admin/status.json` and posts to `/admin/cookies`; assets at `/static/*` |
+| `GET /admin/status.json` | full status — superset of `GET /status` (adds live model list, quota/usage, warm-session counts, uptime) — behind the admin credential |
 | `POST /admin/cookies` | apply a cookie export now. Body: `{"cookies": "<any accepted format>"}` (JSON), a raw cookie string, or a cookie JSON array. Writes `cookie_file`, tears down + rebuilds the client, returns `{applied, cookie_count, session_cookie_present, reinit_ok, cookie_mode}`. `400` on an unparseable payload, `502` if the rebuild fails. |
-| `GET /admin/status.json` | same data as `GET /status`, but behind the admin credential (for monitoring tools that want it gated) |
 
 **Watched file:** set `cookie_watch_file` to a path and its contents are mirrored
 into `cookie_file` whenever they change. Independently, whenever `cookie_file`'s
@@ -616,8 +620,10 @@ into `cookie_file` whenever they change. Independently, whenever `cookie_file`'s
 rebuilt automatically — `__Secure-1PSIDTS` rotation alone does **not** trigger a
 rebuild. Poll interval / disable: `cookie_watch_interval`.
 
-`GET /status` itself stays open (no auth) — it exposes only health signals and
-aggregate counts, no cookie values or prompts.
+`GET /status` and `GET /` (JSON form) stay open (no auth) — they expose only
+health signals, aggregate counts and links, no cookie values or prompts. The
+dashboard front end lives in `app/static/`; to replace it with your own, swap
+those files — the `/admin/status.json` + `/admin/cookies` JSON contract is stable.
 
 ---
 

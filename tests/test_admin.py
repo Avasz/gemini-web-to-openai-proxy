@@ -56,9 +56,18 @@ def test_admin_page_basic_auth(client_factory):
 def test_admin_page_header_and_query(client_factory):
     with client_factory() as c:
         pw = _cred(c).password
-        assert c.get("/admin", headers={"X-Admin-Password": pw}).status_code == 200
+        assert c.get("/admin?admin_key=wrong").status_code == 401  # before any session
         assert c.get(f"/admin?admin_key={pw}").status_code == 200
-        assert c.get("/admin?admin_key=wrong").status_code == 401
+        c.cookies.clear()
+        assert c.get("/admin", headers={"X-Admin-Password": pw}).status_code == 200
+
+
+def test_admin_session_cookie_keeps_xhr_authed(client_factory):
+    with client_factory() as c:
+        pw = _cred(c).password
+        assert c.get(f"/admin?admin_key={pw}").status_code == 200   # sets gop_admin
+        # subsequent XHR with no header/query is still authed via the cookie
+        assert c.get("/admin/status.json").status_code == 200
 
 
 def test_generation_api_key_does_not_grant_admin(client_factory):
@@ -114,5 +123,36 @@ def test_admin_status_json(client_factory):
         pw = _cred(c).password
         r = c.get("/admin/status.json", headers={"X-Admin-Password": pw})
         assert r.status_code == 200
-        assert "health" in r.json() and "activity" in r.json()
+        body = r.json()
+        for k in ("health", "activity", "capacity", "models", "warm_sessions", "uptime_seconds"):
+            assert k in body
         assert c.get("/admin/status.json").status_code == 401
+
+
+def test_root_api_index_no_auth(client_factory):
+    with client_factory() as c:
+        r = c.get("/", headers={"accept": "application/json"})
+        assert r.status_code == 200
+        assert r.json()["name"] == "gemini-openai-proxy"
+        assert r.json()["links"]["admin_dashboard"] == "/admin"
+
+
+def test_root_html_is_admin_gated(client_factory):
+    with client_factory() as c:
+        assert c.get("/", headers={"accept": "text/html"}).status_code == 401
+        r = c.get("/", headers={"accept": "text/html", "X-Admin-Password": _cred(c).password})
+        assert r.status_code == 200
+        assert "<html" in r.text.lower()
+
+
+def test_static_assets_served_without_auth(client_factory):
+    with client_factory() as c:
+        assert c.get("/static/dashboard.css").status_code == 200
+        assert c.get("/static/dashboard.js").status_code == 200
+
+
+def test_status_is_full_and_unauthed(client_factory):
+    with client_factory() as c:
+        r = c.get("/status")
+        assert r.status_code == 200
+        assert "models" in r.json() and "capacity" in r.json()
