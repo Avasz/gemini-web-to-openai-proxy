@@ -48,7 +48,7 @@ the current working directory.
 | `cookie_cache_dir` | string (path) or null | `null` | active | where `gemini_webapi` keeps its rotated-cookie cache. `null` ⇒ a pre-set `$GEMINI_COOKIE_PATH`, else `{data_dir}/gemini_webapi` |
 | `auto_refresh` | boolean | `true` | active | let the library keep the session token fresh in the background. Turn **off** only when another process already owns refresh for the same account |
 | `max_concurrent_generations` | integer | `3` | reserved | in-flight generation cap (Phase 9) |
-| `activity_log_retention_days` | integer | `7` | reserved | local request-history retention (Phase 7) |
+| `activity_log_retention_days` | integer | `7` | active | how long request-history rows are kept in `{data_dir}/activity.db` |
 | `warm_session_idle_timeout` | number (s) | `900.0` | reserved | warm-session pruning (Phase 10) |
 | `image_fetch_timeout` | number (s) | `20.0` | active | per-image timeout when fetching a remote image URL for input |
 | `max_image_bytes` | integer | `20971520` (20 MiB) | active | max decoded size of a single input image; larger is rejected (that image only) |
@@ -206,6 +206,7 @@ carry the admin credential in Phase 8. It has no required keys today.
 |---|---|---|
 | `{data_dir}/gemini_webapi/` | `gemini_webapi` | rotated `__Secure-1PSIDTS` cache, kept fresh by background refresh |
 | `{data_dir}/gemini_webapi_anon/` | `gemini_webapi` | same, but only used when `force_anonymous: true` (never sees an authenticated session) |
+| `{data_dir}/activity.db` | this service | SQLite request history (per-request model / latency / ok / error code), pruned to `activity_log_retention_days` |
 
 Future phases add the request-history database and the admin-credential file here.
 For Docker, mount `data_dir` as a persistent volume so a container recreate

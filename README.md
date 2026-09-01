@@ -94,6 +94,21 @@ Phase 6 (OpenAI Responses API) complete:
   → `response.completed`, plus `response.function_call_arguments.*` for tools
 - shares model resolution, images and tool parsing with the other surfaces
 
+Phase 7 (local observability) complete:
+
+- `GET /status` now reports **three independent health signals** (SRS 2.7):
+  `page_reachable` (cookie value isn't garbage), `client_authenticated`
+  (`account_status == AVAILABLE` — can be false while the page loads),
+  `recent_requests_ok` (generations completing over the last hour) — plus an
+  `overall` roll-up (`app/health.py`)
+- **local request history** in `{data_dir}/activity.db` (SQLite): every generation
+  attempt on any surface — model requested/served, ok/fail, error code, latency,
+  size — written off the request path by a background worker; a write failure
+  never touches the request (`app/activity_log.py`)
+- `/status.activity` rolls the trailing 24h up: totals, error rate, avg latency,
+  per-served-model breakdown, errors by code, time since last request
+- rows pruned to `activity_log_retention_days`
+
 ## Setup
 
 ```bash

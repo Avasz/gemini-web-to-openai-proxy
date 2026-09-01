@@ -8,11 +8,13 @@ validated resolution -- never from the model's own text (SRS 2.6).
 from __future__ import annotations
 
 import logging
+import time
 from dataclasses import dataclass, field
 from typing import Any, AsyncIterator
 
 from gemini_webapi.exceptions import GeminiError
 
+from .activity_log import RequestRecord
 from .errors import UpstreamError, classify_upstream
 from .gemini_service import GeminiService
 from .media import OutputImage, PreparedInputImages, encode_output_images
@@ -41,6 +43,36 @@ class GenerationResult:
     images: list[OutputImage] = field(default_factory=list)
     input_image_errors: list[str] = field(default_factory=list)
     tool_calls: list[ParsedToolCall] = field(default_factory=list)
+
+
+def _record(
+    service: GeminiService,
+    *,
+    surface: str,
+    requested: str,
+    started: float,
+    prompt_chars: int,
+    streamed: bool,
+    result: "GenerationResult | None",
+    error_code: str | None,
+) -> None:
+    activity = getattr(service, "activity", None)
+    if activity is None:
+        return
+    activity.record(
+        RequestRecord(
+            ts=time.time(),
+            surface=surface,
+            model_requested=requested,
+            model_served=result.resolved.served_name if result else None,
+            ok=error_code is None,
+            error_code=error_code,
+            latency_ms=round((time.time() - started) * 1000, 1),
+            prompt_chars=prompt_chars,
+            reply_chars=len(result.text) if result else 0,
+            streamed=streamed,
+        )
+    )
 
 
 def _prepared_input(service: GeminiService, bundle: PromptBundle) -> PreparedInputImages:
@@ -132,28 +164,44 @@ async def run_generation(
     *,
     temporary: bool,
     tools: ToolContext | None = None,
+    surface: str = "",
 ) -> GenerationResult:
-    client, resolved = await _resolve(service, requested_model)
-    prompt = _prompt_with_tools(bundle, tools)
-    async with _prepared_input(service, bundle) as prepared:
-        try:
-            output = await client.generate_content(
-                prompt,
-                files=prepared.paths or None,
-                model=resolved.model,
-                temporary=temporary,
-                extended_thinking=resolved.extended_thinking,
-            )
-        except GeminiError as exc:
-            raise classify_upstream(exc) from exc
-    result = GenerationResult(
-        text=output.text or "",
-        resolved=resolved,
-        chat_metadata=list(output.metadata or []),
-        images=await encode_output_images(list(getattr(output, "images", []) or [])),
-        input_image_errors=prepared.errors,
-    )
-    return _finalise_tools(result, tools)
+    started = time.time()
+    prompt_chars = len(bundle.prompt)
+    try:
+        client, resolved = await _resolve(service, requested_model)
+        prompt = _prompt_with_tools(bundle, tools)
+        async with _prepared_input(service, bundle) as prepared:
+            try:
+                output = await client.generate_content(
+                    prompt,
+                    files=prepared.paths or None,
+                    model=resolved.model,
+                    temporary=temporary,
+                    extended_thinking=resolved.extended_thinking,
+                )
+            except GeminiError as exc:
+                raise classify_upstream(exc) from exc
+        result = GenerationResult(
+            text=output.text or "",
+            resolved=resolved,
+            chat_metadata=list(output.metadata or []),
+            images=await encode_output_images(list(getattr(output, "images", []) or [])),
+            input_image_errors=prepared.errors,
+        )
+        _finalise_tools(result, tools)
+    except (ModelNotAvailable, UpstreamError) as exc:
+        code = getattr(exc, "code", None) or "model_not_available"
+        _record(service, surface=surface, requested=requested_model, started=started,
+                prompt_chars=prompt_chars, streamed=False, result=None, error_code=code)
+        raise
+    except Exception:
+        _record(service, surface=surface, requested=requested_model, started=started,
+                prompt_chars=prompt_chars, streamed=False, result=None, error_code="internal")
+        raise
+    _record(service, surface=surface, requested=requested_model, started=started,
+            prompt_chars=prompt_chars, streamed=False, result=result, error_code=None)
+    return result
 
 
 async def stream_generation(
@@ -163,6 +211,7 @@ async def stream_generation(
     *,
     temporary: bool,
     tools: ToolContext | None = None,
+    surface: str = "",
 ) -> AsyncIterator[tuple[str, GenerationResult]]:
     """Yield ``(delta_text, running_result)`` tuples. The final tuple carries the
     complete text, tool calls and metadata.
@@ -170,41 +219,55 @@ async def stream_generation(
     When tools are active the caller should ignore the intermediate deltas (a
     tool-call block spans several of them) and act on the final tuple only.
     """
-    client, resolved = await _resolve(service, requested_model)
-    prompt = _prompt_with_tools(bundle, tools)
+    started = time.time()
+    prompt_chars = len(bundle.prompt)
     last_full = ""
     final: GenerationResult | None = None
     raw_images: list = []
-    async with _prepared_input(service, bundle) as prepared:
-        try:
-            stream = client.generate_content_stream(
-                prompt,
-                files=prepared.paths or None,
-                model=resolved.model,
-                temporary=temporary,
-                extended_thinking=resolved.extended_thinking,
-            )
-            async for output in stream:
-                full = output.text or ""
-                delta = output.text_delta or ""
-                if not delta and len(full) > len(last_full):
-                    delta = full[len(last_full) :]
-                if len(full) >= len(last_full):
-                    last_full = full
-                raw_images = list(getattr(output, "images", []) or []) or raw_images
-                final = GenerationResult(
-                    text=last_full,
-                    resolved=resolved,
-                    chat_metadata=list(output.metadata or []),
-                    input_image_errors=prepared.errors,
+    try:
+        client, resolved = await _resolve(service, requested_model)
+        prompt = _prompt_with_tools(bundle, tools)
+        async with _prepared_input(service, bundle) as prepared:
+            try:
+                stream = client.generate_content_stream(
+                    prompt,
+                    files=prepared.paths or None,
+                    model=resolved.model,
+                    temporary=temporary,
+                    extended_thinking=resolved.extended_thinking,
                 )
-                if delta:
-                    yield delta, final
-        except GeminiError as exc:
-            raise classify_upstream(exc) from exc
-    if final is None:
-        final = GenerationResult(text="", resolved=resolved,
-                                 input_image_errors=prepared.errors)
-    final.images = await encode_output_images(raw_images)
-    _finalise_tools(final, tools)
+                async for output in stream:
+                    full = output.text or ""
+                    delta = output.text_delta or ""
+                    if not delta and len(full) > len(last_full):
+                        delta = full[len(last_full) :]
+                    if len(full) >= len(last_full):
+                        last_full = full
+                    raw_images = list(getattr(output, "images", []) or []) or raw_images
+                    final = GenerationResult(
+                        text=last_full,
+                        resolved=resolved,
+                        chat_metadata=list(output.metadata or []),
+                        input_image_errors=prepared.errors,
+                    )
+                    if delta:
+                        yield delta, final
+            except GeminiError as exc:
+                raise classify_upstream(exc) from exc
+        if final is None:
+            final = GenerationResult(text="", resolved=resolved,
+                                     input_image_errors=prepared.errors)
+        final.images = await encode_output_images(raw_images)
+        _finalise_tools(final, tools)
+    except (ModelNotAvailable, UpstreamError) as exc:
+        _record(service, surface=surface, requested=requested_model, started=started,
+                prompt_chars=prompt_chars, streamed=True, result=None,
+                error_code=getattr(exc, "code", None) or "model_not_available")
+        raise
+    except Exception:
+        _record(service, surface=surface, requested=requested_model, started=started,
+                prompt_chars=prompt_chars, streamed=True, result=None, error_code="internal")
+        raise
+    _record(service, surface=surface, requested=requested_model, started=started,
+            prompt_chars=prompt_chars, streamed=True, result=final, error_code=None)
     yield "", final

@@ -185,7 +185,8 @@ async def _chat_stream(
     try:
         yield frame({"role": "assistant", "content": ""}, None)
         async for delta_text, running in stream_generation(
-            service, requested_model, bundle, temporary=temporary, tools=tools
+            service, requested_model, bundle, temporary=temporary, tools=tools,
+            surface="chat.completions"
         ):
             final_result = running
             served_name = running.resolved.served_name
@@ -265,7 +266,8 @@ async def chat_completions(
 
     try:
         result = await run_generation(
-            service, requested_model, bundle, temporary=temporary, tools=tools
+            service, requested_model, bundle, temporary=temporary, tools=tools,
+            surface="chat.completions"
         )
     except ModelNotAvailable as exc:
         logger.warning("request rejected: %s", exc)

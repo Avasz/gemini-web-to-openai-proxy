@@ -553,40 +553,65 @@ Liveness only. Never touches Gemini. No auth.
 
 ### `GET /status`
 
-Attempts a lazy Gemini client init so the report reflects whether the configured
-credentials actually work. No auth (yet).
+Machine-readable health. Attempts a lazy Gemini client init so the report
+reflects whether the configured credentials actually work. No auth (yet — the
+admin credential lands in Phase 8).
 
 ```json
 {
   "version": "0.1.0",
   "config_source": "/path/to/config.json",
-  "gemini_client_initialized": true,
+  "health": {
+    "overall": "ok",
+    "page_reachable": true,
+    "client_authenticated": true,
+    "account_status": "AVAILABLE",
+    "recent_requests_ok": true,
+    "recent_window_hours": 1.0,
+    "recent": { "total": 5, "ok": 5, "errors": 0, "error_rate": 0.0 }
+  },
   "gemini": {
-    "ready": true,
-    "cookie_mode": "authenticated",
-    "force_anonymous": false,
-    "init_error": null,
-    "cookie_file_present": true,
-    "session_cookie_present": true,
-    "cookie_cache_dir": "…/data/gemini_webapi",
-    "access_token_present": true,
-    "running": true,
-    "cookie_source": "Base Cookies"
+    "ready": true, "cookie_mode": "authenticated", "force_anonymous": false,
+    "init_error": null, "cookie_file_present": true, "session_cookie_present": true,
+    "cookie_cache_dir": "…/data/gemini_webapi", "access_token_present": true,
+    "running": true, "cookie_source": "Base Cookies"
+  },
+  "activity": {
+    "enabled": true, "window_hours": 24.0,
+    "total": 42, "ok": 40, "errors": 2, "error_rate": 0.0476,
+    "avg_latency_ms": 3120.5,
+    "last_request_at": 1788248000.1, "seconds_since_last": 74.2,
+    "per_model": { "gemini-flash": { "count": 30, "ok": 29 }, "gemini-pro": { "count": 12, "ok": 11 } },
+    "errors_by_code": { "session_unauthenticated": 1, "upstream_timeout": 1 }
   }
 }
 ```
 
+**`health`** — three signals that fail independently (SRS 2.7), reported
+separately so "the page loaded" never stands in for "healthy":
+
 | Field | Meaning |
 |---|---|
-| `gemini_client_initialized` | the lazy init succeeded on this call |
+| `page_reachable` | a bare GET to `gemini.google.com/app` works — the cookie value isn't garbage (`null` if no client yet) |
+| `client_authenticated` | `gemini_webapi` considers the session a real account (`account_status == AVAILABLE`) — can be `false` while `page_reachable` is `true` |
+| `account_status` | the library's status name (`AVAILABLE`, `UNAUTHENTICATED`, `ACCESS_TEMPORARILY_UNAVAILABLE`, …) |
+| `recent_requests_ok` | generations have been completing over the last hour (`null` if none) |
+| `overall` | `ok` / `degraded` / `down` — a roll-up, but always check the individual signals |
+
+**`gemini`** — client/cookie detail:
+
+| Field | Meaning |
+|---|---|
 | `cookie_mode` | `authenticated` / `anonymous` / `anonymous(forced)` |
-| `cookie_file_present` / `session_cookie_present` | whether the configured cookie file exists / contains a `__Secure-1PSID` |
-| `cookie_source` | which candidate group actually authenticated: `Cache`, `Base Cookies`, `Browser (...)`, `Guest` |
-| `cookie_cache_dir` | where `gemini_webapi` stores its rotated-cookie cache |
+| `cookie_file_present` / `session_cookie_present` | cookie file exists / contains `__Secure-1PSID` |
+| `cookie_source` | which group authenticated: `Cache`, `Base Cookies`, `Browser (...)`, `Guest` |
+| `cookie_cache_dir` | where `gemini_webapi` keeps its rotated-cookie cache |
 | `init_error` | last init failure string, if any |
 
-> The full three-way health split (page check vs. library-authenticated vs.
-> recent request success) and local request history land in Phase 7.
+**`activity`** — rolling 24h summary from the local request history (`app/activity.db`).
+Every generation attempt (any surface) is recorded off the request path; a write
+failure never affects the request. `per_model` is keyed by the model actually
+served. Token counts are estimates so latency is the meaningful metric.
 
 ---
 

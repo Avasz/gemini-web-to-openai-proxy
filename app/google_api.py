@@ -192,7 +192,8 @@ async def _stream_google(
     first = True
     try:
         async for delta_text, running in stream_generation(
-            service, requested_model, bundle, temporary=temporary, tools=tools
+            service, requested_model, bundle, temporary=temporary, tools=tools,
+            surface="streamGenerateContent"
         ):
             final = running
             served_name = running.resolved.served_name
@@ -306,7 +307,8 @@ async def generate(
 
     try:
         result = await run_generation(
-            service, requested_model, bundle, temporary=temporary, tools=tools
+            service, requested_model, bundle, temporary=temporary, tools=tools,
+            surface="generateContent"
         )
     except ModelNotAvailable as exc:
         logger.warning("google request rejected: %s", exc)

@@ -30,6 +30,8 @@ def test_status_shape_without_network(tmp_path, monkeypatch):
         r = c.get("/status")
         assert r.status_code == 200
         body = r.json()
-        assert body["gemini_client_initialized"] is False
+        assert body["health"]["overall"] == "down"
+        assert body["health"]["client_authenticated"] is False
         assert body["gemini"]["session_cookie_present"] is False
         assert body["config_source"] == "defaults"
+        assert body["activity"]["enabled"] is True

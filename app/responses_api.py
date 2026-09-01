@@ -153,7 +153,8 @@ async def create_response(
 
     try:
         result = await run_generation(
-            service, requested_model, bundle, temporary=temporary, tools=tools
+            service, requested_model, bundle, temporary=temporary, tools=tools,
+            surface="responses"
         )
     except ModelNotAvailable as exc:
         logger.warning("responses request rejected: %s", exc)
@@ -227,7 +228,8 @@ async def _response_stream(
 
     try:
         async for delta_text, running in stream_generation(
-            service, requested_model, bundle, temporary=temporary, tools=tools
+            service, requested_model, bundle, temporary=temporary, tools=tools,
+            surface="responses"
         ):
             final = running
             if not delta_text or suppress:
