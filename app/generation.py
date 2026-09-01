@@ -17,9 +17,20 @@ from .errors import UpstreamError, classify_upstream
 from .gemini_service import GeminiService
 from .media import OutputImage, PreparedInputImages, encode_output_images
 from .model_selection import ModelNotAvailable, ResolvedModel, available_model_names, resolve
+from .tools import ParsedToolCall, ToolChoice, ToolSpec, build_tool_instructions, parse_tool_calls
 from .translation import PromptBundle
 
 logger = logging.getLogger("gemini_proxy.generation")
+
+
+@dataclass
+class ToolContext:
+    specs: list[ToolSpec] = field(default_factory=list)
+    choice: ToolChoice = field(default_factory=ToolChoice)
+
+    @property
+    def active(self) -> bool:
+        return bool(self.specs) and self.choice.mode != "none"
 
 
 @dataclass
@@ -29,6 +40,7 @@ class GenerationResult:
     chat_metadata: list[str] = field(default_factory=list)
     images: list[OutputImage] = field(default_factory=list)
     input_image_errors: list[str] = field(default_factory=list)
+    tool_calls: list[ParsedToolCall] = field(default_factory=list)
 
 
 def _prepared_input(service: GeminiService, bundle: PromptBundle) -> PreparedInputImages:
@@ -38,6 +50,27 @@ def _prepared_input(service: GeminiService, bundle: PromptBundle) -> PreparedInp
         fetch_timeout=float(getattr(cfg, "image_fetch_timeout", 20.0)),
         max_bytes=int(getattr(cfg, "max_image_bytes", 20 * 1024 * 1024)),
     )
+
+
+def _prompt_with_tools(bundle: PromptBundle, tools: ToolContext | None) -> str:
+    if not tools or not tools.active:
+        return bundle.prompt
+    block = build_tool_instructions(tools.specs, tools.choice)
+    if not block:
+        return bundle.prompt
+    # Put the tool contract AFTER the conversation -- Gemini weights the tail of
+    # the prompt heavily, and a leading instruction block gets ignored once the
+    # user's actual question follows it.
+    return f"{bundle.prompt}\n\n---\n\n{block}"
+
+
+def _finalise_tools(result: GenerationResult, tools: ToolContext | None) -> GenerationResult:
+    if tools and tools.active:
+        calls, visible = parse_tool_calls(result.text)
+        result.tool_calls = calls
+        if calls:
+            result.text = visible
+    return result
 
 
 def _served_model_meta(
@@ -71,6 +104,8 @@ def served_model_metadata(
         meta["input_image_errors"] = result.input_image_errors
     if result.images:
         meta["output_image_count"] = len(result.images)
+    if result.tool_calls:
+        meta["tool_call_count"] = len(result.tool_calls)
     return meta
 
 
@@ -96,12 +131,14 @@ async def run_generation(
     bundle: PromptBundle,
     *,
     temporary: bool,
+    tools: ToolContext | None = None,
 ) -> GenerationResult:
     client, resolved = await _resolve(service, requested_model)
+    prompt = _prompt_with_tools(bundle, tools)
     async with _prepared_input(service, bundle) as prepared:
         try:
             output = await client.generate_content(
-                bundle.prompt,
+                prompt,
                 files=prepared.paths or None,
                 model=resolved.model,
                 temporary=temporary,
@@ -109,13 +146,14 @@ async def run_generation(
             )
         except GeminiError as exc:
             raise classify_upstream(exc) from exc
-    return GenerationResult(
+    result = GenerationResult(
         text=output.text or "",
         resolved=resolved,
         chat_metadata=list(output.metadata or []),
         images=await encode_output_images(list(getattr(output, "images", []) or [])),
         input_image_errors=prepared.errors,
     )
+    return _finalise_tools(result, tools)
 
 
 async def stream_generation(
@@ -124,17 +162,23 @@ async def stream_generation(
     bundle: PromptBundle,
     *,
     temporary: bool,
+    tools: ToolContext | None = None,
 ) -> AsyncIterator[tuple[str, GenerationResult]]:
     """Yield ``(delta_text, running_result)`` tuples. The final tuple carries the
-    complete text and metadata."""
+    complete text, tool calls and metadata.
+
+    When tools are active the caller should ignore the intermediate deltas (a
+    tool-call block spans several of them) and act on the final tuple only.
+    """
     client, resolved = await _resolve(service, requested_model)
+    prompt = _prompt_with_tools(bundle, tools)
     last_full = ""
     final: GenerationResult | None = None
     raw_images: list = []
     async with _prepared_input(service, bundle) as prepared:
         try:
             stream = client.generate_content_stream(
-                bundle.prompt,
+                prompt,
                 files=prepared.paths or None,
                 model=resolved.model,
                 temporary=temporary,
@@ -162,4 +206,5 @@ async def stream_generation(
         final = GenerationResult(text="", resolved=resolved,
                                  input_image_errors=prepared.errors)
     final.images = await encode_output_images(raw_images)
+    _finalise_tools(final, tools)
     yield "", final

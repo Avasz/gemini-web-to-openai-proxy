@@ -23,12 +23,14 @@ from .auth import require_api_key
 from .errors import UpstreamError
 from .generation import (
     GenerationResult,
+    ToolContext,
     run_generation,
     served_model_metadata,
     stream_generation,
 )
 from .gemini_service import GeminiService
 from .model_selection import ModelNotAvailable
+from .tools import choice_from_google, tools_from_google
 from .translation import google_contents_to_prompt
 
 logger = logging.getLogger("gemini_proxy.google")
@@ -122,6 +124,13 @@ def _images_payload(result: GenerationResult) -> list[dict[str, Any]]:
     ]
 
 
+def _function_call_parts(result: GenerationResult) -> list[dict[str, Any]]:
+    return [
+        {"functionCall": {"name": tc.name, "args": tc.arguments}}
+        for tc in result.tool_calls
+    ]
+
+
 def _generate_content_response(
     service: GeminiService, result: GenerationResult
 ) -> dict[str, Any]:
@@ -130,6 +139,7 @@ def _generate_content_response(
     if result.text:
         parts.append({"text": result.text})
     parts.extend(_image_parts(result))
+    parts.extend(_function_call_parts(result))
     if not parts:
         parts.append({"text": ""})
     payload: dict[str, Any] = {
@@ -163,10 +173,16 @@ def _chunk_response(text: str, served_name: str) -> dict[str, Any]:
 
 
 async def _stream_google(
-    service: GeminiService, requested_model: str, bundle, temporary: bool, sse: bool
+    service: GeminiService,
+    requested_model: str,
+    bundle,
+    temporary: bool,
+    sse: bool,
+    tools: ToolContext | None = None,
 ):
     served_name = requested_model
     final: GenerationResult | None = None
+    suppress_deltas = bool(tools and tools.active)
 
     def emit(obj: dict) -> str:
         return f"data: {json.dumps(obj)}\n\n" if sse else json.dumps(obj)
@@ -176,11 +192,11 @@ async def _stream_google(
     first = True
     try:
         async for delta_text, running in stream_generation(
-            service, requested_model, bundle, temporary=temporary
+            service, requested_model, bundle, temporary=temporary, tools=tools
         ):
             final = running
             served_name = running.resolved.served_name
-            if not delta_text:
+            if not delta_text or suppress_deltas:
                 continue
             if not sse and not first:
                 yield ","
@@ -207,8 +223,13 @@ async def _stream_google(
             yield "]"
         return
 
-    # Final chunk: finishReason + usage + served-model metadata (+ any images)
-    tail_parts = _image_parts(final) if final is not None else []
+    # Final chunk: finishReason + usage + served-model metadata (+ any images/calls)
+    tail_parts: list[dict[str, Any]] = []
+    if final is not None:
+        if suppress_deltas and final.text:
+            tail_parts.append({"text": final.text})
+        tail_parts.extend(_image_parts(final))
+        tail_parts.extend(_function_call_parts(final))
     tail: dict[str, Any] = {
         "candidates": [
             {
@@ -268,19 +289,24 @@ async def generate(
     )
     if bundle.images:
         logger.info("attaching %d input image(s)", len(bundle.images))
-    if body.get("tools"):
-        logger.warning("Ignoring 'tools': native tool-calling lands in Phase 5.")
+
+    tools = ToolContext(
+        specs=tools_from_google(body.get("tools")),
+        choice=choice_from_google(body.get("toolConfig") or body.get("tool_config")),
+    )
+    if tools.specs:
+        logger.info("prompt-injecting %d tool(s), mode=%s", len(tools.specs), tools.choice.mode)
 
     if action == "streamGenerateContent":
         sse = request.query_params.get("alt", "").lower() == "sse"
         return StreamingResponse(
-            _stream_google(service, requested_model, bundle, temporary, sse),
+            _stream_google(service, requested_model, bundle, temporary, sse, tools),
             media_type="text/event-stream" if sse else "application/json",
         )
 
     try:
         result = await run_generation(
-            service, requested_model, bundle, temporary=temporary
+            service, requested_model, bundle, temporary=temporary, tools=tools
         )
     except ModelNotAvailable as exc:
         logger.warning("google request rejected: %s", exc)

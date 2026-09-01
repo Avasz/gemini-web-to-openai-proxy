@@ -65,6 +65,22 @@ Phase 4 (Multimodal) complete:
   plus native `inlineData` parts on the Google path
 - config: `image_fetch_timeout`, `max_image_bytes`
 
+Phase 5 (tool / function calling) complete:
+
+- OpenAI `tools` / `tool_choice` and Google `tools` / `toolConfig` both normalised
+  to one internal shape, injected into the prompt as a plain-text call contract
+  (Gemini Web has no native function calling) — `app/tools.py`
+- reply parsing tolerates the fenced `tool_call` block **with or without a newline
+  before the closing fence** (SRS 2.3), multiple blocks, `json`/`tool_code` tags,
+  and a bare JSON object as a last resort (SRS 2.4)
+- OpenAI: `message.tool_calls` + `finish_reason: "tool_calls"`; streaming
+  suppresses partial deltas and emits a `tool_calls` frame at the end
+- Google: `functionCall` parts in `candidates[].content.parts`
+- prior `tool_calls` / `tool` messages are rendered back into the prompt so the
+  model sees tool results on the next turn
+- **caveat:** whether Gemini emits a call vs. answering inline is not guaranteed
+  even with `tool_choice: required` — prompt-engineered, not native
+
 ## Setup
 
 ```bash

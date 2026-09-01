@@ -60,6 +60,7 @@ class FakeClient:
         self.calls = []
         self.raise_on_generate = None
         self.next_images = []  # FakeImage list returned by the next generation
+        self.next_reply = None  # if set, generation returns exactly this text
 
     def list_models(self):
         return list(self._models)
@@ -79,12 +80,20 @@ class FakeClient:
         )
         if self.raise_on_generate is not None:
             raise self.raise_on_generate
-        return FakeOutput(f"echo: {prompt[:40]}", images=list(self.next_images))
+        text = self.next_reply if self.next_reply is not None else f"echo: {prompt[:40]}"
+        return FakeOutput(text, images=list(self.next_images))
 
     async def generate_content_stream(self, prompt, model=None, temporary=False,
                                       extended_thinking=False, files=None, **kw):
         self.calls.append({"stream": True, "extended_thinking": extended_thinking,
-                           "files": list(files) if files else None})
+                           "files": list(files) if files else None, "prompt": prompt})
+        if self.next_reply is not None:
+            # deliver it in two pieces so the "spans multiple deltas" path is exercised
+            mid = len(self.next_reply) // 2
+            yield FakeOutput(self.next_reply[:mid], delta=self.next_reply[:mid])
+            yield FakeOutput(self.next_reply, delta=self.next_reply[mid:])
+            yield FakeOutput(self.next_reply, delta="", images=list(self.next_images))
+            return
         acc = ""
         for piece in ["Hello", " ", "world"]:
             acc += piece

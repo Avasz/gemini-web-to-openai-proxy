@@ -216,7 +216,8 @@ OpenAI Chat Completions shape.
 | `model` | string | no | `default_model` | see [Model names](#model-names) |
 | `stream` | boolean | no | `false` | SSE streaming when `true` |
 | `temporary_chat` | boolean | no | `temporary_chat_default` | when `true`, the conversation is **not** saved to your Gemini account history |
-| `tools`, `tool_choice` | — | no | — | **accepted but ignored** in Phase 3 (a warning is logged); native tool-calling is Phase 5 |
+| `tools` | array | no | — | OpenAI function-calling shape: `[{"type":"function","function":{"name","description","parameters"}}]`. Prompt-injected (Gemini Web has no native function calling) and parsed back out — see [Tool calling](#tool-calling) |
+| `tool_choice` | string / object | no | `"auto"` | `"auto"`, `"none"` (no injection), `"required"` / `{"type":"function","function":{"name":"…"}}` (forced) |
 
 Any other standard OpenAI fields (`temperature`, `top_p`, `max_tokens`,
 `n`, `stop`, `seed`, `response_format`, …) are currently **accepted and ignored** —
@@ -288,6 +289,61 @@ Terminated by `data: [DONE]`.
 
 ---
 
+## Tool calling
+
+Gemini Web has **no native function-calling protocol**, so tool calling is
+implemented by prompt engineering (SRS 2.3 / 2.4):
+
+1. The tool list + a plain-text call syntax are injected into the prompt.
+2. The reply is scanned for that syntax; matches are returned in the wire
+   format's structured shape and stripped from the visible text.
+
+**Reliability caveat:** whether the model actually emits a tool call rather than
+answering directly is not guaranteed — it depends on the model, the phrasing of
+the request, and `tool_choice`. `tool_choice: "required"` / `mode: "ANY"` pushes
+hard for a call but Gemini may still answer inline. Treat a missing tool call as
+possible and handle the plain-text reply.
+
+**Parsing** accepts, in order:
+
+- a fenced block ` ```tool_call ` / ` ```json ` / ` ```tool_code ` containing
+  `{"name": "...", "arguments": {...}}` — **including when the model omits the
+  newline before the closing ` ``` `** (a known Gemini quirk, SRS 2.3)
+- multiple such blocks → multiple calls
+- a bare top-level JSON object with a `name` + `arguments`/`args` shape (last
+  resort, SRS 2.4)
+
+**OpenAI response** — `choices[0].message.tool_calls`:
+
+```json
+{ "message": { "role": "assistant", "content": null,
+    "tool_calls": [{ "id": "call_…", "type": "function",
+      "function": { "name": "get_weather", "arguments": "{\"city\": \"Paris\"}" } }] },
+  "finish_reason": "tool_calls" }
+```
+
+`arguments` is a JSON **string** (OpenAI convention). `content` is `null` when the
+reply was only a tool call, otherwise any prose the model kept.
+
+**Streaming with tools:** intermediate content deltas are suppressed (a call
+block spans several), then a `delta.tool_calls` frame is emitted followed by the
+`finish_reason: "tool_calls"` frame.
+
+**Continuing after a tool result:** send the assistant `tool_calls` message and a
+`{"role": "tool", "tool_call_id": "...", "content": "<result>"}` message back —
+both are rendered into the prompt so the model sees the outcome.
+
+**Google response** — a `functionCall` part in `candidates[0].content.parts`:
+
+```json
+{ "parts": [{ "functionCall": { "name": "get_weather", "args": { "city": "Paris" } } }] }
+```
+
+`toolConfig.functionCallingConfig.mode` maps: `AUTO` → auto, `ANY` → required
+(with `allowedFunctionNames`), `NONE` → no injection.
+
+---
+
 ## Google-native API
 
 Mimics `generativelanguage.googleapis.com` (`v1beta`).
@@ -337,7 +393,8 @@ reasoning suffix, e.g. `models/gemini-pro-high:generateContent`).
 | `contents` | array or object | **yes** in practice | — | conversation turns; a single object is accepted |
 | `systemInstruction` / `system_instruction` | object or string | no | — | `{"parts":[{"text":"…"}]}` or a bare string |
 | `temporaryChat` | boolean | no | `temporary_chat_default` | non-standard extension; excludes the chat from account history |
-| `tools` | — | no | — | **accepted but ignored** in Phase 3; Phase 5 |
+| `tools` | array | no | — | `[{"functionDeclarations":[{"name","description","parameters"}]}]` — prompt-injected, see [Tool calling](#tool-calling) |
+| `toolConfig` | object | no | — | `functionCallingConfig.mode` (`AUTO`/`ANY`/`NONE`) + `allowedFunctionNames` |
 | `generationConfig`, `toolConfig`, `safetySettings` | — | no | — | currently **accepted and ignored** |
 
 **`contents[]` shape:**
@@ -463,7 +520,6 @@ credentials actually work. No auth (yet).
 
 | Feature | Phase |
 |---|---|
-| Native tool / function calling (both wire formats) | 5 |
 | `POST /v1/responses` (OpenAI Responses API) | 6 |
 | Local request history + 3-way `/status` health | 7 |
 | Admin dashboard, separate admin credential | 8 |

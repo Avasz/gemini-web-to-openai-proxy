@@ -20,6 +20,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from .auth import require_api_key
 from .generation import (
     GenerationResult,
+    ToolContext,
     run_generation,
     served_model_metadata,
     stream_generation,
@@ -27,6 +28,7 @@ from .generation import (
 from .errors import UpstreamError
 from .gemini_service import GeminiService
 from .model_selection import ModelNotAvailable
+from .tools import choice_from_openai, tools_from_openai
 from .translation import messages_to_prompt
 
 logger = logging.getLogger("gemini_proxy.openai")
@@ -102,21 +104,44 @@ async def list_models(request: Request, _: None = Depends(require_api_key)) -> d
     return {"object": "list", "data": data}
 
 
+def _tool_calls_payload(result: GenerationResult) -> list[dict[str, Any]]:
+    return [
+        {
+            "id": tc.call_id,
+            "type": "function",
+            "function": {"name": tc.name, "arguments": tc.arguments_json},
+        }
+        for tc in result.tool_calls
+    ]
+
+
 def _build_completion(
     service: GeminiService, model_field: str, result: GenerationResult
 ) -> dict[str, Any]:
     prompt_meta = served_model_metadata(service, result)
     completion_tokens = _rough_tokens(result.text)
     images = _images_payload(result)
-    message: dict[str, Any] = {"role": "assistant", "content": result.text}
+    tool_calls = _tool_calls_payload(result)
+    message: dict[str, Any] = {
+        "role": "assistant",
+        "content": (result.text or None) if tool_calls else result.text,
+    }
     if images:
         message["images"] = images
+    if tool_calls:
+        message["tool_calls"] = tool_calls
     payload: dict[str, Any] = {
         "id": f"chatcmpl-{uuid.uuid4().hex}",
         "object": "chat.completion",
         "created": int(time.time()),
         "model": result.resolved.served_name,
-        "choices": [{"index": 0, "message": message, "finish_reason": "stop"}],
+        "choices": [
+            {
+                "index": 0,
+                "message": message,
+                "finish_reason": "tool_calls" if tool_calls else "stop",
+            }
+        ],
         "usage": {
             "prompt_tokens": 0,
             "completion_tokens": completion_tokens,
@@ -131,12 +156,17 @@ def _build_completion(
 
 
 async def _chat_stream(
-    service: GeminiService, requested_model: str, bundle, temporary: bool
+    service: GeminiService,
+    requested_model: str,
+    bundle,
+    temporary: bool,
+    tools: ToolContext | None = None,
 ):
     chunk_id = f"chatcmpl-{uuid.uuid4().hex}"
     created = int(time.time())
     served_name = requested_model
     final_result: GenerationResult | None = None
+    suppress_deltas = bool(tools and tools.active)
 
     def frame(delta: dict[str, Any], finish: str | None, extra: dict | None = None):
         payload = {
@@ -153,11 +183,11 @@ async def _chat_stream(
     try:
         yield frame({"role": "assistant", "content": ""}, None)
         async for delta_text, running in stream_generation(
-            service, requested_model, bundle, temporary=temporary
+            service, requested_model, bundle, temporary=temporary, tools=tools
         ):
             final_result = running
             served_name = running.resolved.served_name
-            if delta_text:
+            if delta_text and not suppress_deltas:
                 yield frame({"content": delta_text}, None)
     except ModelNotAvailable as exc:
         logger.warning("stream rejected: %s", exc)
@@ -177,12 +207,19 @@ async def _chat_stream(
         return
 
     extra = None
+    finish = "stop"
     if final_result is not None:
         extra = {META_KEY: served_model_metadata(service, final_result)}
         images = _images_payload(final_result)
         if images:
             extra["images"] = images
-    yield frame({}, "stop", extra)
+        tool_calls = _tool_calls_payload(final_result)
+        if tool_calls:
+            finish = "tool_calls"
+            if suppress_deltas and final_result.text:
+                yield frame({"content": final_result.text}, None)
+            yield frame({"tool_calls": tool_calls}, None)
+    yield frame({}, finish, extra)
     yield "data: [DONE]\n\n"
 
 
@@ -210,18 +247,23 @@ async def chat_completions(
     bundle = messages_to_prompt(messages)
     if bundle.images:
         logger.info("attaching %d input image(s)", len(bundle.images))
-    if body.get("tools"):
-        logger.warning("Ignoring 'tools': native tool-calling lands in Phase 5.")
+
+    tools = ToolContext(
+        specs=tools_from_openai(body.get("tools")),
+        choice=choice_from_openai(body.get("tool_choice")),
+    )
+    if tools.specs:
+        logger.info("prompt-injecting %d tool(s), choice=%s", len(tools.specs), tools.choice.mode)
 
     if stream:
         return StreamingResponse(
-            _chat_stream(service, requested_model, bundle, temporary),
+            _chat_stream(service, requested_model, bundle, temporary, tools),
             media_type="text/event-stream",
         )
 
     try:
         result = await run_generation(
-            service, requested_model, bundle, temporary=temporary
+            service, requested_model, bundle, temporary=temporary, tools=tools
         )
     except ModelNotAvailable as exc:
         logger.warning("request rejected: %s", exc)
