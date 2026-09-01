@@ -41,6 +41,21 @@ The admin dashboard, at a glance:
 
 ## Quick start
 
+**Using Docker** (nothing to clone or install):
+
+```bash
+docker pull ghcr.io/avasz/gemini-web-to-openai-proxy:latest
+mkdir gemini-web-to-openai-proxy && cd gemini-web-to-openai-proxy
+curl -fsSL https://raw.githubusercontent.com/Avasz/gemini-web-to-openai-proxy/main/docker-compose.yml -o docker-compose.yml
+docker compose up -d
+```
+
+The proxy is now on `http://localhost:8085` (guest mode, no cookies needed).
+Grab the admin password with `docker compose logs | grep -A4 "ADMIN DASHBOARD"`,
+open `http://localhost:8085/admin`, and paste your Gemini cookies to unlock the
+full models. Full details and the build-from-source variant are in
+[Deployment → Docker](#docker).
+
 **Using `pip`** (standard, no extra tools):
 
 ```bash
