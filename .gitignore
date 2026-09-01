@@ -16,3 +16,9 @@ data/
 
 # deployment
 deploy/config/
+
+# internal-only docs, not part of the public repo
+SRS_CLEAN_ROOM_REWRITE.md
+docs/BACKLOG.md
+docs/DEPLOYMENT.md
+docs/CONFIGURATION.md

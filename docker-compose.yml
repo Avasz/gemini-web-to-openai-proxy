@@ -10,7 +10,7 @@ services:
       # ADMIN_PASSWORD: "change-me"
       GEMINI_PROXY_LOG_LEVEL: INFO
     volumes:
-      # your config.json + cookies.json (see config.example.json / docs/CONFIGURATION.md)
+      # your config.json + cookies.json (see config.example.json / README.md)
       - ./deploy/config:/config
       # rotated-cookie cache, activity.db, admin_credential — MUST persist across recreates
       - gop-data:/data
