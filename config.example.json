@@ -2,7 +2,7 @@
   "host": "127.0.0.1",
   "port": 8000,
   "request_timeout": 120.0,
-  "default_model": "gemini-2.5-flash",
+  "default_model": "gemini-flash",
   "api_keys": [],
   "cookie_file": "cookies.json",
   "temporary_chat_default": false,

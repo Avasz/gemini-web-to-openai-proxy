@@ -14,6 +14,19 @@ Phase 1 (Foundation) complete:
   fallback and teardown/reinit (`app/gemini_service.py`)
 - `GET /healthz` (liveness) and `GET /status` (Gemini client health) endpoints
 
+Phase 2 (Core OpenAI-compatible chat) complete:
+
+- `GET /v1/models` — live model list from the authenticated account
+- `POST /v1/chat/completions` — non-streaming and SSE streaming (OpenAI delta format)
+- Message array → single Gemini prompt, role sections preserved; image parts split
+  out for Phase 4 (`app/translation.py`)
+- Live model resolution with a `-high` reasoning suffix mapped to `gemini_webapi`'s
+  on/off `extended_thinking`; unknown model → 400 listing the account's real models
+  (`app/model_selection.py`)
+- Every response carries `x_gemini_proxy` metadata: the validated served model
+  (never the model's self-claim), model id, cookie mode, and live account usage
+- Per-endpoint API-key auth, separate from the (future) admin credential (`app/auth.py`)
+
 ## Setup
 
 ```bash
@@ -41,3 +54,20 @@ pytest                                    # unit tests, no network
 python scripts/check_anonymous.py         # live: zero-credential guest session
 python scripts/check_anonymous.py --prompt "say hi"
 ```
+
+### Try the OpenAI API live
+
+```bash
+python -m app --port 8000
+
+curl -s localhost:8000/v1/models | python -m json.tool
+
+curl -s localhost:8000/v1/chat/completions -H 'content-type: application/json' \
+  -d '{"model":"gemini-flash","messages":[{"role":"user","content":"Reply with exactly: pong"}]}'
+
+curl -sN localhost:8000/v1/chat/completions -H 'content-type: application/json' \
+  -d '{"model":"gemini-flash","stream":true,"messages":[{"role":"user","content":"Count 1 to 3"}]}'
+```
+
+Works with any OpenAI client by pointing `base_url` at `http://localhost:8000/v1`.
+Append `-high` to a model name (e.g. `gemini-pro-high`) to enable extended thinking.

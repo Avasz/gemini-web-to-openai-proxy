@@ -29,7 +29,7 @@ DEFAULTS: dict[str, Any] = {
     "port": 8000,
     "request_timeout": 120.0,
     # Model
-    "default_model": "gemini-2.5-flash",
+    "default_model": "gemini-flash",
     # Auth for generation endpoints; empty list => open (warned at startup)
     "api_keys": [],
     # Cookie source for the Gemini Web session
