@@ -3,7 +3,9 @@
 Exposes an authenticated `gemini.google.com` web session as an OpenAI-compatible and
 Google-native HTTP API. Built to the spec in `SRS_CLEAN_ROOM_REWRITE.md`.
 
-**Full endpoint + parameter reference: [`docs/API.md`](docs/API.md).**
+- **API reference:** [`docs/API.md`](docs/API.md) — every endpoint and parameter
+- **Configuration reference:** [`docs/CONFIGURATION.md`](docs/CONFIGURATION.md) —
+  config keys, cookie file formats, CLI flags, environment variables
 
 ## Status
 
