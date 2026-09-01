@@ -7,8 +7,9 @@ import os
 import time
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request
-from fastapi.responses import FileResponse
+from fastapi import Depends, FastAPI, Request
+from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import __version__
@@ -96,10 +97,24 @@ def create_app(config: Config | None = None) -> FastAPI:
         if gemini.is_ready():
             await gemini.reset()
 
+    docs_access = str(getattr(cfg, "docs_access", "admin")).lower()
+    if docs_access not in ("admin", "open", "disabled"):
+        logger.warning("Unknown docs_access %r, falling back to 'admin'.", docs_access)
+        docs_access = "admin"
+    status_access = str(getattr(cfg, "status_access", "admin")).lower()
+    if status_access not in ("admin", "open", "disabled"):
+        logger.warning("Unknown status_access %r, falling back to 'admin'.", status_access)
+        status_access = "admin"
+
     app = FastAPI(
         title="Gemini Web -> OpenAI-compatible API gateway",
         version=__version__,
         lifespan=lifespan,
+        # Auto docs are re-added below (or not) based on docs_access, so they
+        # can be gated behind the admin credential instead of always open.
+        docs_url=None,
+        redoc_url=None,
+        openapi_url=None,
     )
     app.state.config = cfg
     app.state.cookie_store = cookie_store
@@ -117,6 +132,21 @@ def create_app(config: Config | None = None) -> FastAPI:
     app.include_router(google_router)
     app.include_router(sessions_router)
     app.include_router(admin_router)
+
+    docs_deps = [Depends(require_admin)] if docs_access == "admin" else []
+    if docs_access != "disabled":
+
+        @app.get("/openapi.json", include_in_schema=False, dependencies=docs_deps)
+        async def openapi_json() -> JSONResponse:
+            return JSONResponse(app.openapi())
+
+        @app.get("/docs", include_in_schema=False, dependencies=docs_deps)
+        async def swagger_ui():
+            return get_swagger_ui_html(openapi_url="/openapi.json", title=f"{app.title} - Swagger UI")
+
+        @app.get("/redoc", include_in_schema=False, dependencies=docs_deps)
+        async def redoc_ui():
+            return get_redoc_html(openapi_url="/openapi.json", title=f"{app.title} - ReDoc")
 
     @app.get("/", include_in_schema=False)
     async def root(request: Request):
@@ -145,11 +175,16 @@ def create_app(config: Config | None = None) -> FastAPI:
         """Liveness only: the process is up. Does not touch Gemini."""
         return {"status": "ok", "version": __version__}
 
-    @app.get("/status")
-    async def status() -> dict:
-        """Machine-readable health (SRS 2.7), no auth: the three independent
-        signals plus the request-history summary and live model/quota info."""
-        return await build_full_status(app)
+    status_deps = [Depends(require_admin)] if status_access == "admin" else []
+    if status_access != "disabled":
+
+        @app.get("/status", dependencies=status_deps)
+        async def status() -> dict:
+            """Machine-readable health (SRS 2.7): the three independent
+            signals plus the request-history summary and live model/quota
+            info. Gated behind the admin credential by default; see
+            status_access in the config."""
+            return await build_full_status(app)
 
     return app
 

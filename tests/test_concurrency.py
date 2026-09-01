@@ -87,7 +87,7 @@ async def test_status_reports_capacity(tmp_path, monkeypatch, fake_client):
     monkeypatch.setattr(gemini_service.GeminiService, "get_client", fake_get_client)
     app = create_app(Config(
         {"cookie_file": str(tmp_path / "c.json"), "data_dir": str(tmp_path / "d"),
-         "max_concurrent_generations": 4},
+         "max_concurrent_generations": 4, "status_access": "open"},
         None,
     ))
     async with app.router.lifespan_context(app):

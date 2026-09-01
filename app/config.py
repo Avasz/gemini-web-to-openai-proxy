@@ -68,6 +68,13 @@ DEFAULTS: dict[str, Any] = {
     "max_warm_sessions": 20,
     # Admin dashboard (SRS 2.9)
     "admin_username": "admin",
+    # Access control for /docs, /redoc, /openapi.json: "admin" (gated behind
+    # the admin credential, the default), "open" (no auth, FastAPI's own
+    # default behavior), or "disabled" (routes don't exist at all).
+    "docs_access": "admin",
+    # Access control for GET /status: "admin" (gated), "open" (no auth,
+    # matches GET /healthz), or "disabled" (route doesn't exist at all).
+    "status_access": "admin",
     # Auto-rebuild the client when the cookie file's __Secure-1PSID changes
     # (a new session pasted in). 0 disables the watcher.
     "cookie_watch_interval": 15.0,

@@ -19,6 +19,8 @@
   "warm_session_idle_timeout": 900.0,
   "max_warm_sessions": 20,
   "admin_username": "admin",
+  "docs_access": "admin",
+  "status_access": "admin",
   "cookie_watch_interval": 15.0,
   "cookie_watch_file": null,
   "image_fetch_timeout": 20.0,

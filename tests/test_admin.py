@@ -151,8 +151,15 @@ def test_static_assets_served_without_auth(client_factory):
         assert c.get("/static/dashboard.js").status_code == 200
 
 
-def test_status_is_full_and_unauthed(client_factory):
+def test_status_requires_admin_by_default(client_factory):
     with client_factory() as c:
         r = c.get("/status")
+        assert r.status_code == 401
+
+
+def test_status_is_full_when_authed(client_factory):
+    with client_factory() as c:
+        pw = _cred(c).password
+        r = c.get("/status", headers=_basic("admin", pw))
         assert r.status_code == 200
         assert "models" in r.json() and "capacity" in r.json()

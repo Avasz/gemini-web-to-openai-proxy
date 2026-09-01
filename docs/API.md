@@ -82,9 +82,34 @@ order, so the first one present wins):
 
 A missing or wrong key gets a `401` with `{"detail": "..."}`.
 
-`GET /healthz` and `GET /status` need no auth at all, from either system,
-they only expose health signals and counts, never cookie values or prompt
-content.
+`GET /healthz` never needs auth, it's a pure liveness check with no
+account or usage detail in it. `GET /status`, on the other hand, along with
+the interactive docs below, are gated behind the **admin credential** by
+default, not the generation `api_keys`, same login as `/admin`.
+
+### `/docs`, `/redoc`, `/openapi.json`, and `/status` are configurable
+
+These four routes expose more than a simple health check: `/status` reports
+account health, cookie state, and usage; `/docs`, `/redoc`, and
+`/openapi.json` expose your entire API surface (every route, every
+request/response schema, including the admin endpoints' shapes), and
+Swagger UI's "Try it out" button lets a visitor send real requests directly
+from the browser. Because of that, both are gated behind the admin
+credential by default rather than left open.
+
+This is controlled by two config keys (also settable as environment
+variables, `GEMINI_PROXY_DOCS_ACCESS` / `GEMINI_PROXY_STATUS_ACCESS`, see
+the README's [Environment variables](../README.md#environment-variables)):
+
+| Key | Default | Values |
+|---|---|---|
+| `docs_access` | `"admin"` | `"admin"` (gated behind the admin credential), `"open"` (no auth, FastAPI's stock behavior), `"disabled"` (the routes don't exist, `404`) |
+| `status_access` | `"admin"` | same three values, for `GET /status` |
+
+If `api_keys` is set, requests against the generation endpoints still need
+a valid key regardless of `docs_access`, gating `/docs` doesn't change that
+separately, it just controls whether your API's structure and `/status`'s
+account detail are visible to begin with.
 
 ---
 
@@ -763,7 +788,7 @@ section, it walks through exactly where to look.
 |---|---|
 | `GET /` | With `Accept: text/html` (i.e. a browser), this serves the dashboard (still admin-gated). Otherwise it returns an unauthenticated JSON index: `{name, version, links}`. |
 | `GET /admin` | The dashboard itself, a static, client-rendered page (served from `app/static/`) that polls `/admin/status.json` for live data and posts to `/admin/cookies` when you import cookies. |
-| `GET /admin/status.json` | The full status payload, a superset of `GET /status` with extra detail added: live model list, quota/usage, warm-session counts, uptime. Requires the admin credential. |
+| `GET /admin/status.json` | The same full status payload as `GET /status` (live model list, quota/usage, warm-session counts, uptime included), always behind the admin credential regardless of how `status_access` is configured; this is what the dashboard itself polls. |
 | `POST /admin/cookies` | Applies a fresh cookie export right now. Body: `{"cookies": "<any accepted format>"}`, or just a raw cookie string, or a cookie JSON array directly, same formats accepted everywhere else cookies are pasted in. Writes them to `cookie_file`, tears down and rebuilds the Gemini client, and returns `{applied, cookie_count, session_cookie_present, reinit_ok, cookie_mode}`. Returns `400` if the payload can't be parsed, `502` if the rebuild itself fails. |
 
 **Keeping cookies fresh automatically:** set `cookie_watch_file` to a path,
@@ -777,10 +802,12 @@ that's expected background rotation, not a new session. The poll interval
 (and whether this watcher runs at all) is controlled by
 `cookie_watch_interval`.
 
-`GET /status` and the JSON form of `GET /` stay open with no auth at all,
-by design, they only expose health signals, aggregate counts, and links,
-never cookie values or prompt content, so there's nothing sensitive to
-protect there.
+The JSON form of `GET /` stays open with no auth at all, by design, it only
+exposes a name/version/links index, nothing account-specific. `GET /status`
+is gated behind the admin credential by default (see
+[`docs_access`/`status_access`](#docs-redoc-openapijson-and-status-are-configurable)
+above); set `status_access: "open"` if you want it reachable without a
+credential, e.g. for a monitoring tool that can't send one.
 
 The dashboard's front end is plain static files in `app/static/`. If you
 want your own look, you can replace those files entirely; the
@@ -791,9 +818,11 @@ stable, so a custom front end just needs to speak that same contract.
 
 ## Health and monitoring endpoints
 
-These need no authentication of any kind, they're meant to be safe to hit
-from an uptime checker, a load balancer, or a monitoring dashboard without
-needing to hand out any credential at all.
+`GET /healthz` needs no authentication at all, it's meant to be safe to hit
+from an uptime checker or load balancer without handing out any credential.
+`GET /status` is gated behind the admin credential by default (see
+[`docs_access`/`status_access`](#docs-redoc-openapijson-and-status-are-configurable)),
+configurable to `"open"` if your monitoring setup needs it credential-free.
 
 ### `GET /healthz`
 
@@ -810,8 +839,11 @@ actually working, only that the server itself hasn't crashed.
 The real health check. Unlike `/healthz`, this one attempts a lazy Gemini
 client initialization, so the report actually reflects whether your
 configured credentials currently work, not just whether the process is
-alive. (Want the same data but behind the admin credential, with extra
-detail added? Use `GET /admin/status.json` instead.)
+alive. Gated behind the admin credential by default, same login as
+`/admin`, see `status_access` if you want it open instead. `GET
+/admin/status.json` returns this exact same payload and is what the
+dashboard itself polls; the only difference is that it's always gated
+regardless of how `status_access` is set.
 
 ```json
 {

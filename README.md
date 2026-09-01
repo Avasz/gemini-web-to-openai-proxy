@@ -183,8 +183,45 @@ lives in `docs/API.md`, linked below.
 | `GET /healthz` | [`docs/API.md`](docs/API.md#get-healthz) |
 | `GET /status` | [`docs/API.md`](docs/API.md#get-status) |
 
-Interactive, always-current docs are also generated automatically by FastAPI
-at `/docs` (Swagger UI) and `/redoc` once the service is running.
+**Interactive docs (no separate table row, always available)**
+
+Once the service is running, FastAPI generates live, always-current API docs
+for every endpoint automatically, no setup needed:
+
+- **Swagger UI**: `http://localhost:8000/docs`
+- **ReDoc**: `http://localhost:8000/redoc`
+- raw OpenAPI schema: `http://localhost:8000/openapi.json`
+
+**Both these and `GET /status` are gated behind the admin credential by
+default.** `/status` only ever exposes health counters, but `/docs` and
+`/openapi.json` expose your entire API surface (every route, every
+request/response schema, including the admin endpoints' shapes), and
+Swagger UI's "Try it out" button lets a visitor send real requests straight
+from the browser, so both default to requiring the same admin
+username/password as `/admin` (see
+[Admin dashboard: username and password](#admin-dashboard-username-and-password)).
+
+This is controlled by two config keys, each accepting `"admin"` (the
+default: gated behind the admin credential), `"open"` (no auth at all,
+matches this service's behavior before this was added), or `"disabled"`
+(the routes don't exist, `404` for anyone):
+
+```json
+{ "docs_access": "admin", "status_access": "admin" }
+```
+
+Set either to `"open"` if you want the old no-auth behavior back (e.g. for
+local development, or a monitoring tool that can't send credentials), or to
+`"disabled"` to remove the routes entirely in a locked-down deployment.
+
+You don't have to edit `config.json` for this, both keys also work as
+environment variables (see [Environment variables](#environment-variables)),
+which is often more convenient for a one-off local run or a Docker
+deployment:
+
+```bash
+GEMINI_PROXY_DOCS_ACCESS=open GEMINI_PROXY_STATUS_ACCESS=open python -m app
+```
 
 ---
 
@@ -271,6 +308,8 @@ the current working directory.
 | `warm_session_idle_timeout` | number (s) | `900.0` | a warm session is dropped after this long without use |
 | `max_warm_sessions` | integer | `20` | cap on live warm sessions; least-recently-used is evicted past this |
 | `admin_username` | string | `"admin"` | username for the admin dashboard's HTTP Basic auth |
+| `docs_access` | string | `"admin"` | who can reach `/docs`, `/redoc`, `/openapi.json`: `"admin"` (gated behind the admin credential), `"open"` (no auth), or `"disabled"` (routes don't exist) |
+| `status_access` | string | `"admin"` | same three options, for `GET /status` |
 | `cookie_watch_interval` | number (s) | `15.0` | how often to check the cookie file for a new session; `0` disables the watcher |
 | `cookie_watch_file` | string (path) or null | `null` | an extra file mirrored into `cookie_file` when it changes (drop-a-file recovery) |
 | `image_fetch_timeout` | number (s) | `20.0` | per-image timeout when fetching a remote image URL for input |

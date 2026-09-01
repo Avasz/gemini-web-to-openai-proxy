@@ -26,7 +26,7 @@ def test_status_shape_without_network(tmp_path, monkeypatch):
 
     monkeypatch.setattr(gemini_service.GeminiService, "get_client", boom)
 
-    with _client(tmp_path) as c:
+    with _client(tmp_path, status_access="open") as c:
         r = c.get("/status")
         assert r.status_code == 200
         body = r.json()
