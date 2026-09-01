@@ -1,0 +1,12 @@
+__pycache__/
+.venv/
+*.pyc
+.env
+config.json
+cookies.json
+*.cookies.json
+admin_credential
+data/
+.pytest_cache/
+.probe/
+*.db

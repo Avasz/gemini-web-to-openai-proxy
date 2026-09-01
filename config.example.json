@@ -1,0 +1,16 @@
+{
+  "host": "127.0.0.1",
+  "port": 8000,
+  "request_timeout": 120.0,
+  "default_model": "gemini-2.5-flash",
+  "api_keys": [],
+  "cookie_file": "cookies.json",
+  "temporary_chat_default": false,
+  "max_concurrent_generations": 3,
+  "connection_timeout": 60.0,
+  "zombie_stream_timeout": 90.0,
+  "cookie_refresh_interval": 600.0,
+  "activity_log_retention_days": 7,
+  "warm_session_idle_timeout": 900.0,
+  "data_dir": "data"
+}
