@@ -64,6 +64,81 @@ def _text_from_content(content: Any, images: list[ImageRef]) -> str:
     return str(content)
 
 
+_GOOGLE_ROLE_LABELS = {
+    "user": "User",
+    "model": "Assistant",
+    "function": "Tool result",
+    "tool": "Tool result",
+}
+
+
+def _google_parts_text(parts: Any, images: list[ImageRef]) -> str:
+    if not isinstance(parts, list):
+        return ""
+    chunks: list[str] = []
+    for part in parts:
+        if not isinstance(part, dict):
+            chunks.append(str(part))
+            continue
+        if "text" in part and part["text"] is not None:
+            chunks.append(str(part["text"]))
+        inline = part.get("inlineData") or part.get("inline_data")
+        if isinstance(inline, dict):
+            mime = inline.get("mimeType") or inline.get("mime_type") or "image/png"
+            data = inline.get("data", "")
+            if data:
+                images.append(ImageRef(url=f"data:{mime};base64,{data}"))
+        file_data = part.get("fileData") or part.get("file_data")
+        if isinstance(file_data, dict) and file_data.get("fileUri"):
+            images.append(ImageRef(url=str(file_data["fileUri"])))
+        fc = part.get("functionCall") or part.get("function_call")
+        if isinstance(fc, dict):
+            chunks.append(
+                f"[called tool: {fc.get('name', 'unknown')}({fc.get('args', {})})]"
+            )
+        fr = part.get("functionResponse") or part.get("function_response")
+        if isinstance(fr, dict):
+            chunks.append(
+                f"[tool {fr.get('name', 'unknown')} returned: {fr.get('response', {})}]"
+            )
+    return "\n".join(c for c in chunks if c)
+
+
+def google_contents_to_prompt(
+    contents: list[dict[str, Any]] | dict[str, Any] | None,
+    system_instruction: Any = None,
+) -> PromptBundle:
+    """Flatten Google-native ``contents`` (+ optional ``systemInstruction``) into
+    the single Gemini prompt string, images split out (SRS 2.4)."""
+    images: list[ImageRef] = []
+    sections: list[str] = []
+
+    sys_text = ""
+    if isinstance(system_instruction, dict):
+        sys_text = _google_parts_text(system_instruction.get("parts"), images)
+    elif isinstance(system_instruction, str):
+        sys_text = system_instruction
+    if sys_text:
+        sections.append(f"System:\n{sys_text}".rstrip())
+
+    if isinstance(contents, dict):
+        contents = [contents]
+    for item in contents or []:
+        if isinstance(item, str):
+            sections.append(f"User:\n{item}")
+            continue
+        if not isinstance(item, dict):
+            continue
+        role = (item.get("role") or "user").lower()
+        label = _GOOGLE_ROLE_LABELS.get(role, role.capitalize())
+        text = _google_parts_text(item.get("parts"), images)
+        if text:
+            sections.append(f"{label}:\n{text}".rstrip())
+
+    prompt = "\n\n".join(sections).strip() or "(empty conversation)"
+    return PromptBundle(prompt=prompt, images=images)
+
+
 def messages_to_prompt(messages: list[dict[str, Any]]) -> PromptBundle:
     images: list[ImageRef] = []
     sections: list[str] = []

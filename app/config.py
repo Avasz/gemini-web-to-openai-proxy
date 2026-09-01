@@ -36,6 +36,10 @@ DEFAULTS: dict[str, Any] = {
     "cookie_file": "cookies.json",
     # Gemini "temporary chat" (not saved to account history) default
     "temporary_chat_default": False,
+    # Force anonymous/guest tier: ignore the cookie file AND the library's own
+    # rotated-cookie cache, and disable auto-refresh. Useful for verifying the
+    # credential-free path without a stale cached session shadowing it (SRS 7).
+    "force_anonymous": False,
     # Reliability tunables (SRS 2.8)
     "max_concurrent_generations": 3,
     "connection_timeout": 60.0,

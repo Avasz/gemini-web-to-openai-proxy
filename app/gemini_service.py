@@ -12,6 +12,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
+from pathlib import Path
 from typing import Any
 
 from curl_cffi.requests import Cookies
@@ -31,6 +33,17 @@ class GeminiService:
         self._lock = asyncio.Lock()
         self._init_error: str | None = None
         self._cookie_mode: str = "uninitialized"
+        self._force_anonymous = bool(getattr(config, "force_anonymous", False))
+        # The library reads its rotated-cookie cache dir from $GEMINI_COOKIE_PATH
+        # lazily on each call, so setting it here (before the first init) is enough.
+        # Keep it under data_dir so it is a single mountable volume (SRS 3), and
+        # use a dedicated sub-dir in forced-anonymous mode that never saw an
+        # authenticated session (SRS 7 -- avoid a stale cache false positive).
+        data_dir = config.resolve_path(getattr(config, "data_dir", "data"))
+        sub = "gemini_webapi_anon" if self._force_anonymous else "gemini_webapi"
+        self._cookie_cache_dir = data_dir / sub
+        self._cookie_cache_dir.mkdir(parents=True, exist_ok=True)
+        os.environ["GEMINI_COOKIE_PATH"] = str(self._cookie_cache_dir)
 
     @property
     def cookie_mode(self) -> str:
@@ -46,11 +59,11 @@ class GeminiService:
         return self._client is not None
 
     def _build_client(self) -> tuple[GeminiClient, str]:
-        cookies = self._cookies.load()
+        cookies = {} if self._force_anonymous else self._cookies.load()
         psid = cookies.get("__Secure-1PSID")
         psidts = cookies.get("__Secure-1PSIDTS")
         client = GeminiClient(psid, psidts)
-        mode = "anonymous"
+        mode = "anonymous(forced)" if self._force_anonymous else "anonymous"
         if psid:
             mode = "authenticated"
             # Pass the whole google.com cookie set through, not just the two the
@@ -72,7 +85,7 @@ class GeminiService:
                 await client.init(
                     timeout=float(self._config.connection_timeout),
                     auto_close=False,
-                    auto_refresh=True,
+                    auto_refresh=not self._force_anonymous,
                     refresh_interval=float(self._config.cookie_refresh_interval),
                     watchdog_timeout=float(self._config.zombie_stream_timeout),
                 )
@@ -110,13 +123,18 @@ class GeminiService:
         snap: dict[str, Any] = {
             "ready": self.is_ready(),
             "cookie_mode": self._cookie_mode,
+            "force_anonymous": self._force_anonymous,
             "init_error": self._init_error,
             "cookie_file_present": bool(
                 self._cookies.path and self._cookies.path.is_file()
             ),
             "session_cookie_present": self._cookies.has_session_cookies(),
+            "cookie_cache_dir": str(self._cookie_cache_dir),
         }
         if self._client is not None:
             snap["access_token_present"] = bool(getattr(self._client, "access_token", None))
             snap["running"] = bool(getattr(self._client, "_running", False))
+            # Which candidate cookie group actually authenticated: "Cache",
+            # "Base Cookies", "Browser (...)", or a guest group (SRS 2.7 / 7).
+            snap["cookie_source"] = getattr(self._client, "_cookie_source", "") or None
         return snap

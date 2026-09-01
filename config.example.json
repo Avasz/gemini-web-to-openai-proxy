@@ -6,6 +6,7 @@
   "api_keys": [],
   "cookie_file": "cookies.json",
   "temporary_chat_default": false,
+  "force_anonymous": false,
   "max_concurrent_generations": 3,
   "connection_timeout": 60.0,
   "zombie_stream_timeout": 90.0,

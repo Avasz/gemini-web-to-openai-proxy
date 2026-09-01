@@ -13,6 +13,7 @@ from .config import Config, load_config
 from .cookies import CookieStore
 from .dotenv import load_dotenv
 from .gemini_service import GeminiService
+from .google_api import router as google_router
 from .openai_api import router as openai_router
 
 logging.basicConfig(
@@ -57,6 +58,7 @@ def create_app(config: Config | None = None) -> FastAPI:
     app.state.gemini = gemini
 
     app.include_router(openai_router)
+    app.include_router(google_router)
 
     @app.get("/healthz")
     async def healthz() -> dict:

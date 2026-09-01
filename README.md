@@ -31,6 +31,23 @@ Phase 2 (Core OpenAI-compatible chat) complete:
   WARNING without a stack trace (`app/errors.py`); a non-default model on a guest
   session is rejected before the network call
 
+Phase 3 (Google-native parity) complete:
+
+- `GET /v1beta/models`, `GET /v1beta/models/{model}` — Google `{"models":[...]}` shape
+- `POST /v1beta/models/{model}:generateContent` — `candidates` / `usageMetadata` /
+  `modelVersion` response shape
+- `POST /v1beta/models/{model}:streamGenerateContent` — JSON-array framing by
+  default, SSE framing with `?alt=sse`
+- `contents` + `systemInstruction` flattened to the same Gemini prompt; `inlineData`
+  image parts split into the shared image list (`app/translation.py`)
+- shares model resolution + generation plumbing with the OpenAI path
+- `GEMINI_COOKIE_PATH` (the library's rotated-cookie cache) is pointed at
+  `{data_dir}/gemini_webapi` so all local state is one mountable directory
+- `/status` now reports the actual cookie source the client authenticated with
+  (`Cache` / `Base Cookies` / `Browser (...)` / `Guest`)
+- `force_anonymous` config option: ignore the cookie file *and* the library cache,
+  disable auto-refresh — for verifying the credential-free path (SRS §7)
+
 ## Setup
 
 ```bash
@@ -75,3 +92,20 @@ curl -sN localhost:8000/v1/chat/completions -H 'content-type: application/json' 
 
 Works with any OpenAI client by pointing `base_url` at `http://localhost:8000/v1`.
 Append `-high` to a model name (e.g. `gemini-pro-high`) to enable extended thinking.
+
+### Try the Google-native API live
+
+```bash
+curl -s localhost:8000/v1beta/models | python -m json.tool
+
+curl -s "localhost:8000/v1beta/models/gemini-flash:generateContent" \
+  -H 'content-type: application/json' \
+  -d '{"contents":[{"role":"user","parts":[{"text":"Name 3 fruits"}]}]}'
+
+curl -sN "localhost:8000/v1beta/models/gemini-flash:streamGenerateContent?alt=sse" \
+  -H 'content-type: application/json' \
+  -d '{"contents":[{"role":"user","parts":[{"text":"Count 1 to 3"}]}]}'
+```
+
+Point `google-genai` at it with `http_options={"base_url": "http://localhost:8000"}`
+and `api_key` set to one of your configured `api_keys` (or anything if none).
