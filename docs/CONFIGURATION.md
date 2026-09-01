@@ -50,6 +50,9 @@ the current working directory.
 | `max_concurrent_generations` | integer | `3` | reserved | in-flight generation cap (Phase 9) |
 | `activity_log_retention_days` | integer | `7` | active | how long request-history rows are kept in `{data_dir}/activity.db` |
 | `warm_session_idle_timeout` | number (s) | `900.0` | reserved | warm-session pruning (Phase 10) |
+| `admin_username` | string | `"admin"` | active | username for the admin dashboard's HTTP Basic auth |
+| `cookie_watch_interval` | number (s) | `15.0` | active | how often to check the cookie file for a new session; `0` disables the watcher |
+| `cookie_watch_file` | string (path) or null | `null` | active | an extra file mirrored into `cookie_file` when it changes (drop-a-file recovery) |
 | `image_fetch_timeout` | number (s) | `20.0` | active | per-image timeout when fetching a remote image URL for input |
 | `max_image_bytes` | integer | `20971520` (20 MiB) | active | max decoded size of a single input image; larger is rejected (that image only) |
 | `data_dir` | string (path) | `"data"` | active | directory for local state; currently holds the library's cookie cache (`{data_dir}/gemini_webapi`, or `{data_dir}/gemini_webapi_anon` when `force_anonymous`) |
@@ -195,8 +198,11 @@ uvicorn app.main:app --port 8000
 
 A minimal `.env` loader runs at startup: `KEY=VALUE` lines, `#` comments, quotes
 stripped from values. A variable already present in the real environment always
-wins. This exists for secrets that shouldn't sit in the JSON config — it will
-carry the admin credential in Phase 8. It has no required keys today.
+wins.
+
+| Variable | Effect |
+|---|---|
+| `ADMIN_PASSWORD` | pins the admin-dashboard password. If unset, a random one is generated on first boot, written to `{data_dir}/admin_credential` (mode 600), and logged prominently at startup. |
 
 ---
 
@@ -207,6 +213,7 @@ carry the admin credential in Phase 8. It has no required keys today.
 | `{data_dir}/gemini_webapi/` | `gemini_webapi` | rotated `__Secure-1PSIDTS` cache, kept fresh by background refresh |
 | `{data_dir}/gemini_webapi_anon/` | `gemini_webapi` | same, but only used when `force_anonymous: true` (never sees an authenticated session) |
 | `{data_dir}/activity.db` | this service | SQLite request history (per-request model / latency / ok / error code), pruned to `activity_log_retention_days` |
+| `{data_dir}/admin_credential` | this service | the generated admin-dashboard password (mode 600); not created if `ADMIN_PASSWORD` is set |
 
 Future phases add the request-history database and the admin-credential file here.
 For Docker, mount `data_dir` as a persistent volume so a container recreate

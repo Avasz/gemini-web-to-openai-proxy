@@ -109,6 +109,23 @@ Phase 7 (local observability) complete:
   per-served-model breakdown, errors by code, time since last request
 - rows pruned to `activity_log_retention_days`
 
+Phase 8 (admin dashboard + hot cookie reload) complete:
+
+- `GET /admin` — browser dashboard (health signals + 24h activity, human-readable)
+  with a textarea to paste a cookie export
+- `POST /admin/cookies` — apply an export now: writes `cookie_file`, tears down +
+  rebuilds the client, **no restart** (`app/cookie_admin.py`)
+- `GET /admin/status.json` — auth-gated copy of `/status` for monitoring tools
+- **separate credential** from the generation `api_keys` (`app/admin_auth.py`):
+  `ADMIN_PASSWORD` env/`.env`, else a random one generated on first boot, saved
+  `{data_dir}/admin_credential` (mode 600), logged at startup. Accepted as HTTP
+  Basic, `X-Admin-Password` header, or `?admin_key=`
+- **cookie watcher** (`app/cookie_watcher.py`): rebuilds the client automatically
+  when `cookie_file`'s `__Secure-1PSID` changes (a new session dropped in) —
+  ignores `__Secure-1PSIDTS` rotation so it never triggers a needless cold
+  re-init; optional `cookie_watch_file` is mirrored into `cookie_file`
+- config: `admin_username`, `cookie_watch_interval`, `cookie_watch_file`
+
 ## Setup
 
 ```bash

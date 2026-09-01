@@ -54,8 +54,8 @@ A key may be supplied in any of these ways (checked in this order):
 
 Failures: `401` with `{"detail": "..."}` — missing key or wrong key.
 
-> The admin/status credential (Phase 8) will be **separate** from these keys.
-> `/healthz` and `/status` currently require no auth.
+> The [admin dashboard](#admin-dashboard-srs-29) credential is **separate** from
+> these keys. `/healthz` and `/status` require no auth.
 
 ---
 
@@ -541,6 +541,38 @@ Errors mid-stream are emitted as a `{"error": {…}}` element (SSE: as a
 
 ---
 
+## Admin dashboard (SRS 2.9)
+
+A browser page for recovering a broken session without shell access, behind its
+**own credential** — completely separate from the generation `api_keys` (a
+generation key grants no admin access, and vice versa).
+
+**Credential:** `ADMIN_PASSWORD` (env / `.env`) if set, else a random one
+generated on first boot, saved to `{data_dir}/admin_credential` (mode 600) and
+logged at startup. Username is `admin_username` (default `admin`).
+
+**Accepted on any admin request:**
+- HTTP Basic `Authorization: Basic base64(admin:<pw>)` (browser prompt)
+- `X-Admin-Password` or `X-Admin-Key` header
+- `?admin_key=<pw>` / `?admin_password=<pw>` query param
+
+| Endpoint | Notes |
+|---|---|
+| `GET /admin` | HTML dashboard: health signals + 24h activity, and a textarea to paste a cookie export |
+| `POST /admin/cookies` | apply a cookie export now. Body: `{"cookies": "<any accepted format>"}` (JSON), a raw cookie string, or a cookie JSON array. Writes `cookie_file`, tears down + rebuilds the client, returns `{applied, cookie_count, session_cookie_present, reinit_ok, cookie_mode}`. `400` on an unparseable payload, `502` if the rebuild fails. |
+| `GET /admin/status.json` | same data as `GET /status`, but behind the admin credential (for monitoring tools that want it gated) |
+
+**Watched file:** set `cookie_watch_file` to a path and its contents are mirrored
+into `cookie_file` whenever they change. Independently, whenever `cookie_file`'s
+`__Secure-1PSID` changes (a new session pasted or dropped in) the client is
+rebuilt automatically — `__Secure-1PSIDTS` rotation alone does **not** trigger a
+rebuild. Poll interval / disable: `cookie_watch_interval`.
+
+`GET /status` itself stays open (no auth) — it exposes only health signals and
+aggregate counts, no cookie values or prompts.
+
+---
+
 ## Operational endpoints
 
 ### `GET /healthz`
@@ -553,9 +585,9 @@ Liveness only. Never touches Gemini. No auth.
 
 ### `GET /status`
 
-Machine-readable health. Attempts a lazy Gemini client init so the report
-reflects whether the configured credentials actually work. No auth (yet — the
-admin credential lands in Phase 8).
+Machine-readable health, no auth. Attempts a lazy Gemini client init so the
+report reflects whether the configured credentials actually work. (For an
+auth-gated copy of this data, use `GET /admin/status.json`.)
 
 ```json
 {
@@ -619,7 +651,5 @@ served. Token counts are estimates so latency is the meaningful metric.
 
 | Feature | Phase |
 |---|---|
-| Local request history + 3-way `/status` health | 7 |
-| Admin dashboard, separate admin credential | 8 |
-| Concurrency cap + shortened timeouts (hardening) | 9 |
+| Concurrency cap + shortened upstream timeouts (reliability hardening) | 9 |
 | Warm reusable chat sessions | 10 |

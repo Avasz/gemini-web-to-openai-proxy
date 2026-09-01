@@ -57,6 +57,13 @@ DEFAULTS: dict[str, Any] = {
     "activity_log_retention_days": 7,
     # Warm-session idle timeout, in seconds (SRS 2.11)
     "warm_session_idle_timeout": 900.0,
+    # Admin dashboard (SRS 2.9)
+    "admin_username": "admin",
+    # Auto-rebuild the client when the cookie file's __Secure-1PSID changes
+    # (a new session pasted in). 0 disables the watcher.
+    "cookie_watch_interval": 15.0,
+    # Optional extra file to mirror into cookie_file when it changes (SRS 2.9)
+    "cookie_watch_file": None,
     # Image input (SRS 2.5)
     "image_fetch_timeout": 20.0,
     "max_image_bytes": 20971520,

@@ -10,7 +10,10 @@ from fastapi import FastAPI
 
 from . import __version__
 from .activity_log import ActivityLog
+from .admin import router as admin_router
+from .admin_auth import resolve_admin_credential
 from .config import Config, load_config
+from .cookie_watcher import CookieWatcher
 from .cookies import CookieStore
 from .dotenv import load_dotenv
 from .gemini_service import GeminiService
@@ -39,11 +42,17 @@ def create_app(config: Config | None = None) -> FastAPI:
     cookie_store = CookieStore(cookie_path)
     gemini = GeminiService(cfg, cookie_store)
 
+    data_dir = cfg.resolve_path(cfg.data_dir)
     activity = ActivityLog(
-        cfg.resolve_path(cfg.data_dir) / "activity.db",
+        data_dir / "activity.db",
         retention_days=float(getattr(cfg, "activity_log_retention_days", 7)),
     )
     gemini.activity = activity
+
+    admin_credential = resolve_admin_credential(
+        data_dir, getattr(cfg, "admin_username", "admin")
+    )
+    cookie_watcher = CookieWatcher(gemini, cookie_store, cfg)
 
     if not cookie_store.has_session_cookies():
         logger.warning(
@@ -54,7 +63,9 @@ def create_app(config: Config | None = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         await activity.start()
+        await cookie_watcher.start()
         yield
+        await cookie_watcher.stop()
         await activity.stop()
         if gemini.is_ready():
             await gemini.reset()
@@ -68,10 +79,12 @@ def create_app(config: Config | None = None) -> FastAPI:
     app.state.cookie_store = cookie_store
     app.state.gemini = gemini
     app.state.activity = activity
+    app.state.admin_credential = admin_credential
 
     app.include_router(openai_router)
     app.include_router(responses_router)
     app.include_router(google_router)
+    app.include_router(admin_router)
 
     @app.get("/healthz")
     async def healthz() -> dict:
