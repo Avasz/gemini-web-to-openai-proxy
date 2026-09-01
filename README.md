@@ -13,6 +13,16 @@ for session/protocol handling.
 
 **API reference:** [`docs/API.md`](docs/API.md)
 
+## Credits
+
+This project exists on top of [`gemini_webapi`](https://github.com/HanaokaYuzu/Gemini-API)
+by [HanaokaYuzu](https://github.com/HanaokaYuzu), which does the actual hard
+part: talking to Gemini Web's protocol, managing the authenticated session,
+rotating cookies, and parsing streamed responses. This project is, at its
+core, a FastAPI layer on top of that library, translating its interface
+into OpenAI-compatible and Google-native API shapes. None of this would
+exist without that library doing the real work underneath it.
+
 ## Similar projects
 
 This isn't the first project bridging a free/consumer-facing chat frontend to an
@@ -517,3 +527,38 @@ pytest                                 # fully offline (fake gemini client)
 python scripts/check_anonymous.py      # live: zero-credential guest session
 python scripts/check_cookies.py        # live: verify cookies.json per-model
 ```
+
+---
+
+## Legal notice and disclaimer
+
+This project is **unofficial and not affiliated with, endorsed by, or
+supported by Google in any way.** It works by reusing a signed-in browser
+session's own cookies against `gemini.google.com`, the same consumer web
+app you'd use in a browser, not Google's official, billed Generative
+Language API. There is no Google Cloud project, no API key issued by
+Google, and no contractual relationship with Google backing any of this.
+
+Because of that, this almost certainly falls outside what Gemini's
+consumer Terms of Service intend for that session to be used for.
+Automating a personal account's session like this carries real risk to
+that account, from being rate-limited, to a session getting flagged, to
+account-level restrictions in more aggressive cases (see the "restart
+storm" warning under [Operating notes](#operating-notes) for one way this
+has actually happened during this project's own development). **Use this
+at your own discretion and your own risk.** Don't point it at an account
+you can't afford to have go sideways, and don't use it in a way (heavy
+concurrent load, aggressive polling, reselling access) that's likely to
+draw attention.
+
+### On how this was built
+
+This project was developed with AI assistance (Claude and Antigravity), not hand-typed
+line by line by a single author. That doesn't mean it was accepted
+uncritically: it was built in reviewed, tested phases, with an automated
+test suite covering the core logic, and specific decisions (authentication
+handling, cookie parsing, the admin dashboard, this documentation) were
+checked, corrected, and re-verified along the way rather than taken as a
+first draft. Treat the code the same way you'd treat any dependency you're
+about to run against your own account: read what it does before you trust
+it with your session.
