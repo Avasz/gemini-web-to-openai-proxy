@@ -148,8 +148,15 @@ def build_tool_instructions(tools: list[ToolSpec], choice: ToolChoice) -> str:
     lines: list[str] = [
         "## Tool-calling protocol",
         "",
-        "This environment routes tool calls. A tool call is expressed as a fenced "
-        f"code block tagged `{_FENCE_TAG}` containing exactly one JSON object:",
+        "You are running inside an application that connects you to the caller's "
+        "own tools. For the purposes of this turn you have no independent internet "
+        "access, no search, and no live data of your own — the tools below are the "
+        "only way to obtain external or real-time information, and the caller "
+        "executes them and sends you the result. Answering such a request from "
+        "memory would be a wrong guess.",
+        "",
+        "A tool call is expressed as a fenced code block tagged "
+        f"`{_FENCE_TAG}` containing exactly one JSON object:",
         "",
         f"```{_FENCE_TAG}",
         '{"name": "<tool name>", "arguments": {<args matching that tool\'s schema>}}',
