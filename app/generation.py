@@ -192,7 +192,9 @@ async def run_generation(
                         client.generate_content(
                             prompt,
                             files=prepared.paths or None,
-                            model=resolved.model,
+                            # a warm chat carries its own (fixed) model; passing it
+                            # again alongside cid/rid can upset the continuation
+                            model=None if chat is not None else resolved.model,
                             chat=chat,
                             temporary=temporary,
                             extended_thinking=resolved.extended_thinking,
@@ -259,7 +261,7 @@ async def stream_generation(
                 stream = client.generate_content_stream(
                     prompt,
                     files=prepared.paths or None,
-                    model=resolved.model,
+                    model=None if chat is not None else resolved.model,
                     chat=chat,
                     temporary=temporary,
                     extended_thinking=resolved.extended_thinking,

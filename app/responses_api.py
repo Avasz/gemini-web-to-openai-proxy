@@ -144,6 +144,9 @@ async def create_response(
     session = resolve_session(request, body.get("session_id"))
     if session:
         requested_model = session.model_name
+        bundle = responses_input_to_prompt(
+            body.get("input"), body.get("instructions"), for_session=True
+        )
     chat = session.chat if session else None
     if bundle.images:
         logger.info("attaching %d input image(s)", len(bundle.images))

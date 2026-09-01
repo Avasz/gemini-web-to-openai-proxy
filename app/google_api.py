@@ -292,7 +292,9 @@ async def generate(
     chat = session.chat if session else None
 
     bundle = google_contents_to_prompt(
-        body.get("contents"), body.get("systemInstruction") or body.get("system_instruction")
+        body.get("contents"),
+        body.get("systemInstruction") or body.get("system_instruction"),
+        for_session=session is not None,
     )
     if bundle.images:
         logger.info("attaching %d input image(s)", len(bundle.images))

@@ -254,7 +254,7 @@ async def chat_completions(
     temporary = bool(body.get("temporary_chat", cfg.temporary_chat_default))
     stream = bool(body.get("stream", False))
 
-    bundle = messages_to_prompt(messages)
+    bundle = messages_to_prompt(messages, for_session=session is not None)
     if bundle.images:
         logger.info("attaching %d input image(s)", len(bundle.images))
 

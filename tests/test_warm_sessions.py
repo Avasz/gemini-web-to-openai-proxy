@@ -111,3 +111,20 @@ def test_request_without_session_is_unaffected(client_factory, fake_client):
                    json={"model": "gemini-flash", "messages": [{"role": "user", "content": "x"}]})
         assert r.status_code == 200
         assert fake_client.calls[-1]["chat"] is None
+        assert fake_client.calls[-1]["prompt"] == "User:\nx"  # role-flattened (stateless)
+
+
+def test_session_sends_bare_trailing_turn_not_role_flattened(client_factory, fake_client):
+    with client_factory() as c:
+        sid = c.post("/v1/sessions", json={"model": "gemini-flash"}).json()["session_id"]
+        c.post("/v1/chat/completions", json={
+            "session_id": sid,
+            "messages": [
+                {"role": "user", "content": "earlier question"},
+                {"role": "assistant", "content": "earlier answer"},
+                {"role": "user", "content": "the new question"},
+            ],
+        })
+    sent = fake_client.calls[-1]["prompt"]
+    assert sent == "the new question"          # no "User:\n", only the trailing turn
+    assert "earlier" not in sent

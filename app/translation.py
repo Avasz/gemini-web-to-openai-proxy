@@ -107,11 +107,24 @@ def _google_parts_text(parts: Any, images: list[ImageRef]) -> str:
 def google_contents_to_prompt(
     contents: list[dict[str, Any]] | dict[str, Any] | None,
     system_instruction: Any = None,
+    *,
+    for_session: bool = False,
 ) -> PromptBundle:
     """Flatten Google-native ``contents`` (+ optional ``systemInstruction``) into
     the single Gemini prompt string, images split out (SRS 2.4)."""
     images: list[ImageRef] = []
     sections: list[str] = []
+
+    if for_session:
+        items = [contents] if isinstance(contents, dict) else (contents or [])
+        turn = _trailing_turn([
+            {"role": ("model" if (i.get("role") == "model") else i.get("role", "user")),
+             "parts": i.get("parts")}
+            for i in items if isinstance(i, dict)
+        ])
+        parts = [_google_parts_text(m.get("parts"), images) for m in turn]
+        return PromptBundle(prompt="\n\n".join(p for p in parts if p) or "(continue)",
+                            images=images)
 
     sys_text = ""
     if isinstance(system_instruction, dict):
@@ -170,13 +183,23 @@ def _responses_content_text(content: Any, images: list[ImageRef]) -> str:
 
 
 def responses_input_to_prompt(
-    input_value: Any, instructions: Any = None
+    input_value: Any, instructions: Any = None, *, for_session: bool = False
 ) -> PromptBundle:
     """Flatten an OpenAI Responses API ``input`` (+ ``instructions``) into the
     single Gemini prompt (SRS 2.3). ``input`` may be a bare string or a list of
     typed items (``message`` / ``function_call`` / ``function_call_output``)."""
     images: list[ImageRef] = []
     sections: list[str] = []
+
+    if for_session:
+        items = [input_value] if isinstance(input_value, (str, dict)) else (input_value or [])
+        msgs = [
+            {"role": it.get("role", "user"), "content": it.get("content")}
+            if isinstance(it, dict) and it.get("type", "message") == "message"
+            else {"role": "user", "content": it if isinstance(it, str) else ""}
+            for it in items
+        ]
+        return messages_to_prompt(msgs, for_session=True)
 
     if isinstance(instructions, str) and instructions.strip():
         sections.append(f"System:\n{instructions.strip()}")
@@ -217,10 +240,34 @@ def responses_input_to_prompt(
     return PromptBundle(prompt=prompt, images=images)
 
 
-def messages_to_prompt(messages: list[dict[str, Any]]) -> PromptBundle:
+def _trailing_turn(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Everything after the last assistant/model message -- what a caller means by
+    'the new turn' when routing through a warm session (SRS 2.11)."""
+    last_assistant = -1
+    for i, m in enumerate(messages):
+        if (m.get("role") or "").lower() in ("assistant", "model"):
+            last_assistant = i
+    return messages[last_assistant + 1 :] if last_assistant >= 0 else messages
+
+
+def messages_to_prompt(
+    messages: list[dict[str, Any]], *, for_session: bool = False
+) -> PromptBundle:
     images: list[ImageRef] = []
     sections: list[str] = []
     unsupported = False
+
+    if for_session:
+        turn = _trailing_turn(messages)
+        parts: list[str] = []
+        for m in turn:
+            role = (m.get("role") or "user").lower()
+            t = _text_from_content(m.get("content"), images)
+            if role in ("tool", "function") and t:
+                t = f"[tool {m.get('name') or m.get('tool_call_id') or 'result'}] {t}"
+            if t:
+                parts.append(t)
+        return PromptBundle(prompt="\n\n".join(parts) or "(continue)", images=images)
 
     for msg in messages:
         role = (msg.get("role") or "user").lower()
