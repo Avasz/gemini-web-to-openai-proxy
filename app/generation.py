@@ -178,6 +178,7 @@ async def run_generation(
     temporary: bool,
     tools: ToolContext | None = None,
     surface: str = "",
+    chat: Any = None,
 ) -> GenerationResult:
     started = time.time()
     prompt_chars = len(bundle.prompt)
@@ -192,6 +193,7 @@ async def run_generation(
                             prompt,
                             files=prepared.paths or None,
                             model=resolved.model,
+                            chat=chat,
                             temporary=temporary,
                             extended_thinking=resolved.extended_thinking,
                         ),
@@ -236,6 +238,7 @@ async def stream_generation(
     temporary: bool,
     tools: ToolContext | None = None,
     surface: str = "",
+    chat: Any = None,
 ) -> AsyncIterator[tuple[str, GenerationResult]]:
     """Yield ``(delta_text, running_result)`` tuples. The final tuple carries the
     complete text, tool calls and metadata.
@@ -257,6 +260,7 @@ async def stream_generation(
                     prompt,
                     files=prepared.paths or None,
                     model=resolved.model,
+                    chat=chat,
                     temporary=temporary,
                     extended_thinking=resolved.extended_thinking,
                 )

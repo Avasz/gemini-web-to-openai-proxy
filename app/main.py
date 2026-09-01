@@ -22,6 +22,8 @@ from .google_api import router as google_router
 from .health import build_health
 from .openai_api import router as openai_router
 from .responses_api import router as responses_router
+from .sessions_api import router as sessions_router
+from .warm_sessions import WarmSessionManager
 
 logging.basicConfig(
     level=os.environ.get("GEMINI_PROXY_LOG_LEVEL", "INFO"),
@@ -55,6 +57,12 @@ def create_app(config: Config | None = None) -> FastAPI:
         float(getattr(cfg, "slot_wait_timeout", 60.0)),
     )
 
+    warm_sessions = WarmSessionManager(
+        gemini,
+        idle_timeout=float(getattr(cfg, "warm_session_idle_timeout", 900.0)),
+        max_sessions=int(getattr(cfg, "max_warm_sessions", 20)),
+    )
+
     admin_credential = resolve_admin_credential(
         data_dir, getattr(cfg, "admin_username", "admin")
     )
@@ -86,10 +94,12 @@ def create_app(config: Config | None = None) -> FastAPI:
     app.state.gemini = gemini
     app.state.activity = activity
     app.state.admin_credential = admin_credential
+    app.state.warm_sessions = warm_sessions
 
     app.include_router(openai_router)
     app.include_router(responses_router)
     app.include_router(google_router)
+    app.include_router(sessions_router)
     app.include_router(admin_router)
 
     @app.get("/healthz")

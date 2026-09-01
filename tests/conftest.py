@@ -47,6 +47,18 @@ class FakeOutput:
         self.images = images or []
 
 
+class FakeChat:
+    def __init__(self, model=None):
+        self.model = model
+        self.messages = []
+        self.metadata = ["c_chat", "r_chat"]
+
+    async def send_message(self, prompt, files=None, temporary=False,
+                           extended_thinking=False, **kw):
+        self.messages.append(prompt)
+        return FakeOutput(f"chat-reply: {prompt[:30]}")
+
+
 class FakeClient:
     def __init__(self):
         self._models = [
@@ -74,12 +86,16 @@ class FakeClient:
                 return m
         raise ValueError(f"Unknown model name: '{name}'")
 
+    def start_chat(self, model=None, **kw):
+        return FakeChat(model=getattr(model, "model_name", model))
+
     async def generate_content(self, prompt, model=None, temporary=False,
-                               extended_thinking=False, files=None, **kw):
+                               extended_thinking=False, files=None, chat=None, **kw):
         self.calls.append(
             {"prompt": prompt, "model": getattr(model, "model_name", model),
              "temporary": temporary, "extended_thinking": extended_thinking,
-             "files": list(files) if files else None}
+             "files": list(files) if files else None,
+             "chat": chat}
         )
         if self.raise_on_generate is not None:
             raise self.raise_on_generate
@@ -95,9 +111,10 @@ class FakeClient:
         return FakeOutput(text, images=list(self.next_images))
 
     async def generate_content_stream(self, prompt, model=None, temporary=False,
-                                      extended_thinking=False, files=None, **kw):
+                                      extended_thinking=False, files=None, chat=None, **kw):
         self.calls.append({"stream": True, "extended_thinking": extended_thinking,
-                           "files": list(files) if files else None, "prompt": prompt})
+                           "files": list(files) if files else None, "prompt": prompt,
+                           "chat": chat})
         if self.next_reply is not None:
             # deliver it in two pieces so the "spans multiple deltas" path is exercised
             mid = len(self.next_reply) // 2

@@ -31,6 +31,7 @@ from .generation import (
 )
 from .gemini_service import GeminiService
 from .model_selection import ModelNotAvailable
+from .sessions_api import resolve_session
 from .tools import choice_from_openai, tools_from_openai
 from .translation import responses_input_to_prompt
 
@@ -140,6 +141,10 @@ async def create_response(
 
     cfg = request.app.state.config
     requested_model, stream, temporary, tools, bundle = _parse_request(body, cfg)
+    session = resolve_session(request, body.get("session_id"))
+    if session:
+        requested_model = session.model_name
+    chat = session.chat if session else None
     if bundle.images:
         logger.info("attaching %d input image(s)", len(bundle.images))
     if tools.specs:
@@ -147,15 +152,18 @@ async def create_response(
 
     if stream:
         return StreamingResponse(
-            _response_stream(service, requested_model, bundle, temporary, tools, body),
+            _response_stream(service, requested_model, bundle, temporary, tools, body, chat,
+                             session, request.app.state.warm_sessions),
             media_type="text/event-stream",
         )
 
     try:
         result = await run_generation(
             service, requested_model, bundle, temporary=temporary, tools=tools,
-            surface="responses"
+            surface="responses", chat=chat,
         )
+        if session:
+            request.app.state.warm_sessions.touch(session)
     except ModelNotAvailable as exc:
         logger.warning("responses request rejected: %s", exc)
         return JSONResponse(
@@ -194,6 +202,9 @@ async def _response_stream(
     temporary: bool,
     tools: ToolContext,
     body: dict[str, Any],
+    chat: Any = None,
+    session: Any = None,
+    warm_mgr: Any = None,
 ):
     resp_id = f"resp_{uuid.uuid4().hex}"
     body = {**body, "_resp_id": resp_id}
@@ -229,7 +240,7 @@ async def _response_stream(
     try:
         async for delta_text, running in stream_generation(
             service, requested_model, bundle, temporary=temporary, tools=tools,
-            surface="responses"
+            surface="responses", chat=chat,
         ):
             final = running
             if not delta_text or suppress:
@@ -291,6 +302,8 @@ async def _response_stream(
 
     if final is None:
         final = GenerationResult(text="", resolved=(await _cheap_resolved(service, requested_model)))
+    elif session is not None and warm_mgr is not None:
+        warm_mgr.touch(session)
 
     # close out the streamed text item (or emit it whole if suppressed)
     full_text = final.text or ""

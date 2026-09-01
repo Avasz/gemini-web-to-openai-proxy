@@ -50,7 +50,8 @@ the current working directory.
 | `max_concurrent_generations` | integer | `3` | active | how many generations may run against the one shared upstream connection at once (SRS 2.8). `2`–`4` recommended; `1` serialises all callers (a warning is logged) |
 | `slot_wait_timeout` | number (s) | `60.0` | active | how long a request waits for a generation slot before a `503` (`code: "capacity"`) |
 | `activity_log_retention_days` | integer | `7` | active | how long request-history rows are kept in `{data_dir}/activity.db` |
-| `warm_session_idle_timeout` | number (s) | `900.0` | reserved | warm-session pruning (Phase 10) |
+| `warm_session_idle_timeout` | number (s) | `900.0` | active | a warm session is dropped after this long without use |
+| `max_warm_sessions` | integer | `20` | active | cap on live warm sessions; the least-recently-used is evicted past this |
 | `admin_username` | string | `"admin"` | active | username for the admin dashboard's HTTP Basic auth |
 | `cookie_watch_interval` | number (s) | `15.0` | active | how often to check the cookie file for a new session; `0` disables the watcher |
 | `cookie_watch_file` | string (path) or null | `null` | active | an extra file mirrored into `cookie_file` when it changes (drop-a-file recovery) |
@@ -142,6 +143,21 @@ can't be parsed is logged and treated as "no cookies" rather than crashing.
 > `{data_dir}/gemini_webapi/` and (once the first auth succeeds) keeps it alive
 > indefinitely via background refresh. Deleting `cookie_file` alone does **not**
 > end the session — clear that directory too, or set `force_anonymous: true`.
+
+### Temporary (unlogged) chat
+
+`temporary_chat_default` (and the per-request override — `temporary_chat` on the
+OpenAI/Responses bodies, `temporaryChat` on Google) sets Gemini's own
+"temporary chat" flag, which keeps the conversation **out of the Google
+account's saved chat history**.
+
+It has **no effect on this service's own request history** (`activity.db`,
+`/status.activity`) — that always records that a request happened (model,
+latency, ok/fail; never the prompt text). If you need true end-to-end
+non-logging, set `activity_log_retention_days` low / disable the DB *and* use
+temporary chat.
+
+---
 
 ### The `__Secure-1PSIDTS` freshness trap
 

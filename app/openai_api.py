@@ -30,6 +30,7 @@ from .generation import (
 from .errors import UpstreamError
 from .gemini_service import GeminiService
 from .model_selection import ModelNotAvailable
+from .sessions_api import resolve_session
 from .tools import choice_from_openai, tools_from_openai
 from .translation import messages_to_prompt
 
@@ -163,6 +164,9 @@ async def _chat_stream(
     bundle,
     temporary: bool,
     tools: ToolContext | None = None,
+    chat: Any = None,
+    session: Any = None,
+    warm_mgr: Any = None,
 ):
     chunk_id = f"chatcmpl-{uuid.uuid4().hex}"
     created = int(time.time())
@@ -186,12 +190,14 @@ async def _chat_stream(
         yield frame({"role": "assistant", "content": ""}, None)
         async for delta_text, running in stream_generation(
             service, requested_model, bundle, temporary=temporary, tools=tools,
-            surface="chat.completions"
+            surface="chat.completions", chat=chat,
         ):
             final_result = running
             served_name = running.resolved.served_name
             if delta_text and not suppress_deltas:
                 yield frame({"content": delta_text}, None)
+        if session is not None and warm_mgr is not None:
+            warm_mgr.touch(session)
     except ModelNotAvailable as exc:
         logger.warning("stream rejected: %s", exc)
         _code = "model_unavailable" if exc.reason == "guest_tier" else "model_not_found"
@@ -243,7 +249,8 @@ async def chat_completions(
         raise HTTPException(status_code=400, detail="'messages' must be a non-empty array.")
 
     cfg = request.app.state.config
-    requested_model = body.get("model") or cfg.default_model
+    session = resolve_session(request, body.get("session_id"))
+    requested_model = session.model_name if session else (body.get("model") or cfg.default_model)
     temporary = bool(body.get("temporary_chat", cfg.temporary_chat_default))
     stream = bool(body.get("stream", False))
 
@@ -258,17 +265,21 @@ async def chat_completions(
     if tools.specs:
         logger.info("prompt-injecting %d tool(s), choice=%s", len(tools.specs), tools.choice.mode)
 
+    chat = session.chat if session else None
     if stream:
         return StreamingResponse(
-            _chat_stream(service, requested_model, bundle, temporary, tools),
+            _chat_stream(service, requested_model, bundle, temporary, tools, chat, session,
+                         request.app.state.warm_sessions),
             media_type="text/event-stream",
         )
 
     try:
         result = await run_generation(
             service, requested_model, bundle, temporary=temporary, tools=tools,
-            surface="chat.completions"
+            surface="chat.completions", chat=chat,
         )
+        if session:
+            request.app.state.warm_sessions.touch(session)
     except ModelNotAvailable as exc:
         logger.warning("request rejected: %s", exc)
         return _model_not_available(exc)

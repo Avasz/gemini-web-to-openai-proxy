@@ -29,6 +29,20 @@ Ideas not yet tried:
 Tool calling *does* work end-to-end when the model emits the syntax (covered by
 tests with a canned reply); this is purely a compliance-rate problem.
 
+## Warm-session latency benefit unverified (Phase 10)
+
+SRS 2.11 says to measure the cold-vs-warm latency delta before *and* after
+building the feature. The feature is built and correct, but the benchmark hasn't
+been run (the Gemini account was too fragile during development to run repeatable
+timing). Before relying on warm sessions for a latency win, measure: same prompt
+as (a) a fresh `/v1/chat/completions` call vs (b) a follow-up turn on a
+`POST /v1/sessions` session, several times each.
+
+## Docker image (SRS 3)
+
+A `Dockerfile` + `docker-compose.yml` with `data_dir` (cookie cache, activity.db,
+admin_credential) mounted as a volume. Not started.
+
 ## Admin dashboard UI (Phase 8)
 
 `app/admin.py` serves a minimal built-in HTML page. The operator has their own UI

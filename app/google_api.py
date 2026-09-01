@@ -30,6 +30,7 @@ from .generation import (
 )
 from .gemini_service import GeminiService
 from .model_selection import ModelNotAvailable
+from .sessions_api import resolve_session
 from .tools import choice_from_google, tools_from_google
 from .translation import google_contents_to_prompt
 
@@ -179,6 +180,7 @@ async def _stream_google(
     temporary: bool,
     sse: bool,
     tools: ToolContext | None = None,
+    chat: Any = None,
 ):
     served_name = requested_model
     final: GenerationResult | None = None
@@ -193,7 +195,7 @@ async def _stream_google(
     try:
         async for delta_text, running in stream_generation(
             service, requested_model, bundle, temporary=temporary, tools=tools,
-            surface="streamGenerateContent"
+            surface="streamGenerateContent", chat=chat,
         ):
             final = running
             served_name = running.resolved.served_name
@@ -284,6 +286,10 @@ async def generate(
     if not requested_model:
         requested_model = cfg.default_model
     temporary = bool(body.get("temporaryChat", cfg.temporary_chat_default))
+    session = resolve_session(request, body.get("sessionId") or body.get("session_id"))
+    if session:
+        requested_model = session.model_name
+    chat = session.chat if session else None
 
     bundle = google_contents_to_prompt(
         body.get("contents"), body.get("systemInstruction") or body.get("system_instruction")
@@ -301,15 +307,17 @@ async def generate(
     if action == "streamGenerateContent":
         sse = request.query_params.get("alt", "").lower() == "sse"
         return StreamingResponse(
-            _stream_google(service, requested_model, bundle, temporary, sse, tools),
+            _stream_google(service, requested_model, bundle, temporary, sse, tools, chat),
             media_type="text/event-stream" if sse else "application/json",
         )
 
     try:
         result = await run_generation(
             service, requested_model, bundle, temporary=temporary, tools=tools,
-            surface="generateContent"
+            surface="generateContent", chat=chat,
         )
+        if session:
+            request.app.state.warm_sessions.touch(session)
     except ModelNotAvailable as exc:
         logger.warning("google request rejected: %s", exc)
         return _model_error_response(exc)

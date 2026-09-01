@@ -36,6 +36,9 @@ class GeminiService:
         # request-history sink + concurrency gate, set by the app factory; None in unit tests
         self.activity: Any = None
         self.gate: Any = None
+        # bumped on every reset(); warm sessions tied to an old generation are dead
+        self.generation: int = 0
+        self._on_reset: list[Any] = []
         self._force_anonymous = bool(getattr(config, "force_anonymous", False))
         self._auto_refresh = not self._force_anonymous and bool(
             getattr(config, "auto_refresh", True)
@@ -125,11 +128,20 @@ class GeminiService:
             self._client = None
             self._cookie_mode = "uninitialized"
             self._init_error = None
+            self.generation += 1
+        for cb in self._on_reset:
+            try:
+                cb()
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("reset callback failed: %s", exc)
         if old is not None:
             try:
                 await old.close()
             except Exception as exc:  # noqa: BLE001
                 logger.warning("Error closing old Gemini client: %s", exc)
+
+    def on_reset(self, callback: Any) -> None:
+        self._on_reset.append(callback)
 
     async def status_snapshot(self) -> dict[str, Any]:
         """Best-effort view of the client for the health endpoint (SRS 2.7).

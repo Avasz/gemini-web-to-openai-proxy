@@ -231,7 +231,8 @@ OpenAI Chat Completions shape.
 | `messages` | array | **yes** | — | non-empty; see message shape below |
 | `model` | string | no | `default_model` | see [Model names](#model-names) |
 | `stream` | boolean | no | `false` | SSE streaming when `true` |
-| `temporary_chat` | boolean | no | `temporary_chat_default` | when `true`, the conversation is **not** saved to your Gemini account history |
+| `temporary_chat` | boolean | no | `temporary_chat_default` | when `true`, the conversation is **not** saved to your Gemini account history (does not affect this service's own request history) |
+| `session_id` | string | no | — | route through a [warm session](#warm-sessions-srs-211-opt-in); fixes the model, `409` if unknown |
 | `tools` | array | no | — | OpenAI function-calling shape: `[{"type":"function","function":{"name","description","parameters"}}]`. Prompt-injected (Gemini Web has no native function calling) and parsed back out — see [Tool calling](#tool-calling) |
 | `tool_choice` | string / object | no | `"auto"` | `"auto"`, `"none"` (no injection), `"required"` / `{"type":"function","function":{"name":"…"}}` (forced) |
 
@@ -556,6 +557,38 @@ Errors mid-stream are emitted as a `{"error": {…}}` element (SSE: as a
 
 ---
 
+## Warm sessions (SRS 2.11) — opt-in
+
+A cold single-shot request pays Gemini's per-conversation setup that a follow-up
+turn in an established conversation skips. Start a session once, then route later
+requests through it.
+
+**Strictly opt-in:** a request with no `session_id` behaves exactly as if this
+feature didn't exist.
+
+| Endpoint | Notes |
+|---|---|
+| `POST /v1/sessions` | body `{model?, priming_message?}`. Resolves the model, opens a chat, and **sends one real priming message** (a handle alone allocates nothing upstream). Returns `{session_id, model, created_at, last_used_at, turns, idle_seconds}`. |
+| `GET /v1/sessions` | `{object:"list", data:[…]}` |
+| `GET /v1/sessions/{id}` | one session's info; `404` if unknown/expired |
+| `DELETE /v1/sessions/{id}` | close it now |
+
+All require a generation `api_key` (same as the generation endpoints).
+
+**Using a session:** add `"session_id": "sess_…"` to a `/v1/chat/completions` or
+`/v1/responses` body, or `"sessionId"` to a Google `generateContent` body. Then:
+
+- the model is **fixed** to the session's model (any `model` in the request is ignored)
+- an unknown / expired / invalidated session → `409` with a clear message — **never** a silent fresh conversation
+- a session is invalidated when the Gemini client is rebuilt (cookie import, watcher) or after `warm_session_idle_timeout` idle, or evicted past `max_warm_sessions` (LRU)
+- state is in memory only — it does not survive a restart
+- send only the **new** turn(s) in `messages`/`input`/`contents` for best effect; the session already holds the history
+
+> The latency benefit is real per the SRS but has **not** been benchmarked in
+> this deployment (see `docs/BACKLOG.md`). Correctness is not affected either way.
+
+---
+
 ## Admin dashboard (SRS 2.9)
 
 A browser page for recovering a broken session without shell access, behind its
@@ -667,7 +700,5 @@ served. Token counts are estimates so latency is the meaningful metric.
 
 ## Not yet implemented
 
-| Feature | Phase |
-|---|---|
-| Concurrency cap + shortened upstream timeouts (reliability hardening) | 9 |
-| Warm reusable chat sessions | 10 |
+All SRS phases (1–10) are implemented. Remaining items are polish / operational
+(Docker image, dashboard visual design, benchmarks) — see `docs/BACKLOG.md`.

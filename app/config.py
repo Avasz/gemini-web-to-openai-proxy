@@ -58,8 +58,9 @@ DEFAULTS: dict[str, Any] = {
     "cookie_refresh_interval": 600.0,
     # Local activity-log retention, in days (SRS 2.7)
     "activity_log_retention_days": 7,
-    # Warm-session idle timeout, in seconds (SRS 2.11)
+    # Warm reusable chat sessions (SRS 2.11)
     "warm_session_idle_timeout": 900.0,
+    "max_warm_sessions": 20,
     # Admin dashboard (SRS 2.9)
     "admin_username": "admin",
     # Auto-rebuild the client when the cookie file's __Secure-1PSID changes

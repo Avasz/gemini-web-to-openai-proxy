@@ -139,6 +139,23 @@ Phase 9 (reliability hardening) complete:
 - rejected multi-session / full-serialisation per SRS; slow-response-into-dead-
   connection tradeoff documented in `docs/API.md`
 
+Phase 10 (temporary chat + warm sessions) complete:
+
+- **Temporary chat** (SRS 2.10): `temporary_chat_default` config + a per-request
+  override on every generation endpoint (`temporary_chat` / `temporaryChat`);
+  omitting it falls back to the config default. Sets Gemini's own "not in account
+  history" flag — does not affect this service's request history (documented)
+- **Warm sessions** (SRS 2.11, opt-in): `POST /v1/sessions` opens a chat and
+  sends one real priming message; `GET`/`DELETE /v1/sessions[/{id}]`. A request
+  opts in with `session_id` — model then fixed to the session's, unknown/expired
+  → `409` (never a silent fresh conversation). In-memory only, idle-pruned,
+  LRU-capped, and invalidated whenever the client is rebuilt (`app/warm_sessions.py`)
+- config: `max_warm_sessions`
+- **latency benefit not yet benchmarked** (`docs/BACKLOG.md`)
+
+**All 10 SRS phases implemented.** 120 tests. Remaining: Docker image, dashboard
+visual design, warm-session benchmark — see `docs/BACKLOG.md`.
+
 ## Setup
 
 ```bash
