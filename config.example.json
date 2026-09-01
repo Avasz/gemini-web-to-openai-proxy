@@ -10,6 +10,8 @@
   "cookie_cache_dir": null,
   "auto_refresh": true,
   "max_concurrent_generations": 3,
+  "slot_wait_timeout": 60.0,
+  "request_timeout": 180.0,
   "connection_timeout": 60.0,
   "zombie_stream_timeout": 90.0,
   "cookie_refresh_interval": 600.0,

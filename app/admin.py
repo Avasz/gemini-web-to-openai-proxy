@@ -41,6 +41,7 @@ async def admin_status(request: Request) -> dict[str, Any]:
     return {
         "health": await build_health(gemini, activity),
         "gemini": await gemini.status_snapshot(),
+        "capacity": gemini.gate.stats() if gemini.gate else None,
         "activity": await activity.summary(24.0),
     }
 

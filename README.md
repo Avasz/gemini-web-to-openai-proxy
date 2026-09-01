@@ -126,6 +126,19 @@ Phase 8 (admin dashboard + hot cookie reload) complete:
   re-init; optional `cookie_watch_file` is mirrored into `cookie_file`
 - config: `admin_username`, `cookie_watch_interval`, `cookie_watch_file`
 
+Phase 9 (reliability hardening) complete:
+
+- `app/concurrency.py` — a `GenerationGate` caps in-flight generations against the
+  single shared upstream connection at `max_concurrent_generations` (default 3,
+  **not** 1); requests over the cap wait up to `slot_wait_timeout` then get a
+  clean `503 capacity` instead of piling on (SRS 2.8's production incident)
+- non-streaming generations are bounded by `request_timeout` (outer `asyncio`
+  timeout → `504 request_timeout`); library `connection_timeout` /
+  `zombie_stream_timeout` were already shortened from the defaults in Phase 1
+- `/status.capacity` reports `{limit, in_flight, waiting, rejected_total}`
+- rejected multi-session / full-serialisation per SRS; slow-response-into-dead-
+  connection tradeoff documented in `docs/API.md`
+
 ## Setup
 
 ```bash

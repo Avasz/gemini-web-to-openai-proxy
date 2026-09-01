@@ -7,6 +7,8 @@ validated resolution -- never from the model's own text (SRS 2.6).
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import logging
 import time
 from dataclasses import dataclass, field
@@ -73,6 +75,17 @@ def _record(
             streamed=streamed,
         )
     )
+
+
+def _gate_slot(service: GeminiService):
+    gate = getattr(service, "gate", None)
+    if gate is not None:
+        return gate.slot()
+    return contextlib.nullcontext()
+
+
+def _request_timeout(service: GeminiService) -> float:
+    return float(getattr(service._config, "request_timeout", 180.0))  # noqa: SLF001
 
 
 def _prepared_input(service: GeminiService, bundle: PromptBundle) -> PreparedInputImages:
@@ -172,16 +185,27 @@ async def run_generation(
         client, resolved = await _resolve(service, requested_model)
         prompt = _prompt_with_tools(bundle, tools)
         async with _prepared_input(service, bundle) as prepared:
-            try:
-                output = await client.generate_content(
-                    prompt,
-                    files=prepared.paths or None,
-                    model=resolved.model,
-                    temporary=temporary,
-                    extended_thinking=resolved.extended_thinking,
-                )
-            except GeminiError as exc:
-                raise classify_upstream(exc) from exc
+            async with _gate_slot(service):
+                try:
+                    output = await asyncio.wait_for(
+                        client.generate_content(
+                            prompt,
+                            files=prepared.paths or None,
+                            model=resolved.model,
+                            temporary=temporary,
+                            extended_thinking=resolved.extended_thinking,
+                        ),
+                        timeout=_request_timeout(service),
+                    )
+                except asyncio.TimeoutError as exc:
+                    raise UpstreamError(
+                        "Generation exceeded the server request timeout. The upstream "
+                        "connection may be stalled; retry.",
+                        504,
+                        "request_timeout",
+                    ) from exc
+                except GeminiError as exc:
+                    raise classify_upstream(exc) from exc
         result = GenerationResult(
             text=output.text or "",
             resolved=resolved,
@@ -227,7 +251,7 @@ async def stream_generation(
     try:
         client, resolved = await _resolve(service, requested_model)
         prompt = _prompt_with_tools(bundle, tools)
-        async with _prepared_input(service, bundle) as prepared:
+        async with _prepared_input(service, bundle) as prepared, _gate_slot(service):
             try:
                 stream = client.generate_content_stream(
                     prompt,

@@ -12,6 +12,7 @@ from . import __version__
 from .activity_log import ActivityLog
 from .admin import router as admin_router
 from .admin_auth import resolve_admin_credential
+from .concurrency import GenerationGate
 from .config import Config, load_config
 from .cookie_watcher import CookieWatcher
 from .cookies import CookieStore
@@ -48,6 +49,11 @@ def create_app(config: Config | None = None) -> FastAPI:
         retention_days=float(getattr(cfg, "activity_log_retention_days", 7)),
     )
     gemini.activity = activity
+
+    gemini.gate = GenerationGate(
+        int(getattr(cfg, "max_concurrent_generations", 3)),
+        float(getattr(cfg, "slot_wait_timeout", 60.0)),
+    )
 
     admin_credential = resolve_admin_credential(
         data_dir, getattr(cfg, "admin_username", "admin")
@@ -105,6 +111,7 @@ def create_app(config: Config | None = None) -> FastAPI:
             "config_source": str(cfg.source_path) if cfg.source_path else "defaults",
             "health": await build_health(gemini, activity),
             "gemini": await gemini.status_snapshot(),
+            "capacity": gemini.gate.stats() if gemini.gate else None,
             "activity": await activity.summary(24.0),
         }
 

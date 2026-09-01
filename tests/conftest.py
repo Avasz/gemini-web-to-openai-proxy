@@ -61,6 +61,9 @@ class FakeClient:
         self.raise_on_generate = None
         self.next_images = []  # FakeImage list returned by the next generation
         self.next_reply = None  # if set, generation returns exactly this text
+        self.generate_delay = 0.0  # seconds to sleep inside generate_content
+        self._concurrent = 0
+        self.concurrent_peak = 0
 
     def list_models(self):
         return list(self._models)
@@ -80,6 +83,14 @@ class FakeClient:
         )
         if self.raise_on_generate is not None:
             raise self.raise_on_generate
+        self._concurrent += 1
+        self.concurrent_peak = max(self.concurrent_peak, self._concurrent)
+        try:
+            if self.generate_delay:
+                import asyncio
+                await asyncio.sleep(self.generate_delay)
+        finally:
+            self._concurrent -= 1
         text = self.next_reply if self.next_reply is not None else f"echo: {prompt[:40]}"
         return FakeOutput(text, images=list(self.next_images))
 

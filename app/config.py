@@ -27,7 +27,6 @@ DEFAULTS: dict[str, Any] = {
     # Network
     "host": "127.0.0.1",
     "port": 8000,
-    "request_timeout": 120.0,
     # Model
     "default_model": "gemini-flash",
     # Auth for generation endpoints; empty list => open (warned at startup)
@@ -50,6 +49,10 @@ DEFAULTS: dict[str, Any] = {
     "auto_refresh": True,
     # Reliability tunables (SRS 2.8)
     "max_concurrent_generations": 3,
+    # How long a request waits for a generation slot before a 503.
+    "slot_wait_timeout": 60.0,
+    # Hard ceiling on a single non-streaming generation (outer asyncio timeout).
+    "request_timeout": 180.0,
     "connection_timeout": 60.0,
     "zombie_stream_timeout": 90.0,
     "cookie_refresh_interval": 600.0,

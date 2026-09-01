@@ -33,8 +33,9 @@ class GeminiService:
         self._lock = asyncio.Lock()
         self._init_error: str | None = None
         self._cookie_mode: str = "uninitialized"
-        # request-history sink, set by the app factory; None in unit tests
+        # request-history sink + concurrency gate, set by the app factory; None in unit tests
         self.activity: Any = None
+        self.gate: Any = None
         self._force_anonymous = bool(getattr(config, "force_anonymous", False))
         self._auto_refresh = not self._force_anonymous and bool(
             getattr(config, "auto_refresh", True)

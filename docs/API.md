@@ -160,8 +160,23 @@ Classified upstream conditions and their HTTP status:
 | `session_unauthenticated` | 403 | no valid cookies; guest sessions can only use the default model |
 | `usage_limit_exceeded` | 429 | account compute/usage cap hit |
 | `rate_limited` | 429 | upstream temporarily rate-limiting this client |
-| `upstream_timeout` | 504 | Gemini request stalled / timed out |
+| `capacity` | 503 | `max_concurrent_generations` already in flight and no slot freed within `slot_wait_timeout` — retry shortly |
+| `upstream_timeout` / `request_timeout` | 504 | Gemini request stalled past the library / `request_timeout` budget |
 | `upstream_error` | 502 | any other `GeminiError` |
+
+### Concurrency & timeouts (SRS 2.8)
+
+The one shared upstream connection is capped at `max_concurrent_generations`
+(default 3) in-flight generations; further requests wait up to `slot_wait_timeout`
+for a slot, then get `503 capacity`. A single non-streaming generation is also
+bounded by `request_timeout` (default 180s → `504 request_timeout`).
+
+**Integrator note:** Gemini Web generations occasionally stall for minutes even
+with nothing else running. "The request eventually succeeds server-side" and "the
+caller is still connected to receive it" are different guarantees — a
+slow-but-successful response can complete into a connection the client already
+timed out. Set generous client-side timeouts, or prefer non-streaming with a
+retry. `/status.capacity` shows `{limit, in_flight, waiting, rejected_total}`.
 
 On **streaming** requests the connection still returns `200` (headers are already
 sent); the error object is emitted as the last event, followed by the stream
@@ -639,6 +654,9 @@ separately so "the page loaded" never stands in for "healthy":
 | `cookie_source` | which group authenticated: `Cache`, `Base Cookies`, `Browser (...)`, `Guest` |
 | `cookie_cache_dir` | where `gemini_webapi` keeps its rotated-cookie cache |
 | `init_error` | last init failure string, if any |
+
+**`capacity`** — the concurrency gate: `limit` (`max_concurrent_generations`),
+`in_flight`, `waiting` (requests queued for a slot), `rejected_total` (`503`s so far).
 
 **`activity`** — rolling 24h summary from the local request history (`app/activity.db`).
 Every generation attempt (any surface) is recorded off the request path; a write

@@ -36,7 +36,7 @@ the current working directory.
 |---|---|---|---|---|
 | `host` | string | `"127.0.0.1"` | active | listen address (overridden by `--host`) |
 | `port` | integer | `8000` | active | listen port (overridden by `--port`) |
-| `request_timeout` | number (s) | `120.0` | reserved | outer request budget; not yet enforced |
+| `request_timeout` | number (s) | `180.0` | active | hard ceiling on a single **non-streaming** generation (outer `asyncio` timeout → `504`) |
 | `default_model` | string | `"gemini-flash"` | active | model used when a request omits `model` |
 | `api_keys` | string[] | `[]` | active | generation-endpoint keys; empty ⇒ endpoints open (startup warning) |
 | `cookie_file` | string (path) | `"cookies.json"` | active | Gemini Web session cookie export (see below) |
@@ -47,7 +47,8 @@ the current working directory.
 | `cookie_refresh_interval` | number (s) | `600.0` | active | how often the library refreshes cookies/token in the background |
 | `cookie_cache_dir` | string (path) or null | `null` | active | where `gemini_webapi` keeps its rotated-cookie cache. `null` ⇒ a pre-set `$GEMINI_COOKIE_PATH`, else `{data_dir}/gemini_webapi` |
 | `auto_refresh` | boolean | `true` | active | let the library keep the session token fresh in the background. Turn **off** only when another process already owns refresh for the same account |
-| `max_concurrent_generations` | integer | `3` | reserved | in-flight generation cap (Phase 9) |
+| `max_concurrent_generations` | integer | `3` | active | how many generations may run against the one shared upstream connection at once (SRS 2.8). `2`–`4` recommended; `1` serialises all callers (a warning is logged) |
+| `slot_wait_timeout` | number (s) | `60.0` | active | how long a request waits for a generation slot before a `503` (`code: "capacity"`) |
 | `activity_log_retention_days` | integer | `7` | active | how long request-history rows are kept in `{data_dir}/activity.db` |
 | `warm_session_idle_timeout` | number (s) | `900.0` | reserved | warm-session pruning (Phase 10) |
 | `admin_username` | string | `"admin"` | active | username for the admin dashboard's HTTP Basic auth |
