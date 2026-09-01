@@ -94,9 +94,11 @@ function renderInner(d) {
   $("banner-title").textContent =
     h.overall === "ok" ? "All Systems Operational"
     : h.overall === "degraded" ? "Degraded" : h.overall === "down" ? "Down" : "Unknown";
+  const healing = d.self_heal && d.self_heal.enabled && h.client_authenticated === false;
   $("banner-text").textContent =
     h.overall === "ok" ? "Service healthy · authenticated · requests flowing"
-    : h.client_authenticated === false ? "Client is not authenticated — import fresh cookies"
+    : h.client_authenticated === false
+      ? "Client is not authenticated — import fresh cookies" + (healing ? " (auto-recovery is running)" : "")
     : h.page_reachable === false ? "gemini.google.com not reachable with this cookie"
     : "See Account & Auth below";
 
@@ -111,9 +113,20 @@ function renderInner(d) {
   setPill($("s-acct"), h.account_status || "n/a", h.account_status === "AVAILABLE" ? "ok" : h.account_status ? "danger" : "warn");
   boolPill($("s-page"), h.page_reachable);
   $("s-source").textContent = g.cookie_source || "n/a";
+
+  const sh = d.self_heal;
+  $("s-heal").textContent = !sh || !sh.enabled
+    ? "off"
+    : authed
+    ? (sh.recoveries ? `on · ${sh.recoveries} recovered` : "on · idle")
+    : `retrying (${sh.attempts} tried${sh.last_result ? ", " + sh.last_result : ""})`;
+
   $("s-detail").textContent = g.init_error
     ? g.init_error
-    : authed ? "Cookie accepted; account is authenticated."
+    : authed
+    ? "Cookie accepted; account is authenticated."
+    : (sh && sh.enabled)
+    ? "Account not authenticated — the client is serving guest tier. Auto-recovery is running; it re-inits the client until the session comes back."
     : "Page loads but the account is not authenticated — the client is serving guest tier.";
 
   const tier = d.usage && d.usage.tier && d.usage.tier.label;

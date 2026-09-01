@@ -75,6 +75,19 @@ class GeminiService:
     def init_error(self) -> str | None:
         return self._init_error
 
+    @property
+    def client_authenticated(self) -> bool | None:
+        """True when the library considers the session a real, AVAILABLE account.
+        None when there is no client yet. Can be False while a page still loads
+        (SRS 2.7) -- that's the degraded state the self-healer targets."""
+        if self._client is None:
+            return None
+        raw = getattr(self._client, "account_status", None)
+        try:
+            return int(raw) == 1000  # AccountStatus.AVAILABLE
+        except (TypeError, ValueError):
+            return None
+
     def is_ready(self) -> bool:
         return self._client is not None
 

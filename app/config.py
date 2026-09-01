@@ -47,6 +47,11 @@ DEFAULTS: dict[str, Any] = {
     # Let the library keep the session's cookies/token fresh in the background.
     # Turn OFF only when another process already owns refresh for this account.
     "auto_refresh": True,
+    # If the client comes up / drifts into a degraded (not-AVAILABLE) state,
+    # gemini_webapi's own refresh loop stops -- so re-init the client on this
+    # interval until it recovers. Conservative on purpose (SRS 7: rapid re-auth
+    # degrades the account); backs off on repeated failure. 0 disables it.
+    "self_heal_interval": 600.0,
     # Reliability tunables (SRS 2.8)
     "max_concurrent_generations": 3,
     # How long a request waits for a generation slot before a 503.

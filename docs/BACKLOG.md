@@ -51,6 +51,15 @@ Feature is built and unit-tested. Open questions from live use:
 Until this settles, treat warm sessions as experimental. The stateless endpoints
 are the solid path; sessions are strictly opt-in and don't affect them.
 
+## Self-heal vs. SRS §7 tension
+
+`app/self_heal.py` re-inits the client when it's degraded, but SRS §7 says rapid
+re-auth *causes* degradation. Mitigated with a 10-min base interval + exponential
+backoff to 1h. If an account is degraded *because* of prior re-init storms, the
+healer's own attempts could prolong it — watch `self_heal.attempts` climbing
+without `recoveries` and consider raising `self_heal_interval` or setting it to 0
+and recovering by hand.
+
 ## ~~Docker image (SRS 3)~~ — done in Phase 11
 
 `Dockerfile` + `docker-compose.yml` + `docs/DEPLOYMENT.md`, `/data` volume for the

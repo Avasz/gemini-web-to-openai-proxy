@@ -24,6 +24,7 @@ from .gemini_service import GeminiService
 from .google_api import router as google_router
 from .openai_api import router as openai_router
 from .responses_api import router as responses_router
+from .self_heal import SessionHealer
 from .sessions_api import router as sessions_router
 from .status_report import build_full_status
 from .warm_sessions import WarmSessionManager
@@ -70,6 +71,12 @@ def create_app(config: Config | None = None) -> FastAPI:
         data_dir, getattr(cfg, "admin_username", "admin")
     )
     cookie_watcher = CookieWatcher(gemini, cookie_store, cfg)
+    # no point re-initing a deliberately-anonymous session
+    heal_interval = 0.0 if getattr(cfg, "force_anonymous", False) else float(
+        getattr(cfg, "self_heal_interval", 600.0)
+    )
+    healer = SessionHealer(gemini, heal_interval)
+    cookie_watcher.on_new_session = healer.nudge
 
     if not cookie_store.has_session_cookies():
         logger.warning(
@@ -81,7 +88,9 @@ def create_app(config: Config | None = None) -> FastAPI:
     async def lifespan(app: FastAPI):
         await activity.start()
         await cookie_watcher.start()
+        await healer.start()
         yield
+        await healer.stop()
         await cookie_watcher.stop()
         await activity.stop()
         if gemini.is_ready():
@@ -99,6 +108,7 @@ def create_app(config: Config | None = None) -> FastAPI:
     app.state.admin_credential = admin_credential
     app.state.warm_sessions = warm_sessions
     app.state.cookie_watcher = cookie_watcher
+    app.state.healer = healer
     app.state.started_at = time.time()
 
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")

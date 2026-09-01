@@ -37,6 +37,7 @@ class CookieWatcher:
         self.watch_file_path = str(self._watch_file) if self._watch_file else None
         self.last_mirror_at: float | None = None
         self.last_mirror_count: int | None = None
+        self.on_new_session = None  # optional callback, set by the app factory
 
     async def start(self) -> None:
         if self._interval <= 0 or self._store.path is None:
@@ -75,6 +76,11 @@ class CookieWatcher:
                 "cookie file session changed (new __Secure-1PSID); rebuilding client"
             )
             await self._service.reset()
+            if callable(self.on_new_session):
+                try:
+                    self.on_new_session()
+                except Exception:  # noqa: BLE001
+                    pass
 
     def _mirror_watch_file(self) -> None:
         from .cookies import parse_cookies

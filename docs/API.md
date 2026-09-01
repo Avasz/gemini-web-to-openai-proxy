@@ -697,6 +697,12 @@ separately so "the page loaded" never stands in for "healthy":
 **`capacity`** — the concurrency gate: `limit` (`max_concurrent_generations`),
 `in_flight`, `waiting` (requests queued for a slot), `rejected_total` (`503`s so far).
 
+**`self_heal`** — the degraded-session recovery task: `enabled`, `interval`,
+`attempts`, `recoveries`, `last_attempt_at`, `last_result`
+(`recovered` / `still degraded` / `error: …`). It re-inits the client while
+`client_authenticated` is `false`, because `gemini_webapi`'s own refresh loop
+stops as soon as the account leaves `AVAILABLE`.
+
 **`activity`** — rolling 24h summary from the local request history (`app/activity.db`).
 Every generation attempt (any surface) is recorded off the request path; a write
 failure never affects the request. `per_model` is keyed by the model actually

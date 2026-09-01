@@ -85,6 +85,7 @@ async def build_full_status(app) -> dict[str, Any]:
         "health": await build_health(gemini, activity),
         "gemini": await gemini.status_snapshot(),
         "capacity": gemini.gate.stats() if gemini.gate else None,
+        "self_heal": state.healer.stats() if getattr(state, "healer", None) else None,
         "activity": await activity.summary(24.0),
         "models": models,
         "usage": usage,

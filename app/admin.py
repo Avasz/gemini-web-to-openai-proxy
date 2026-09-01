@@ -70,5 +70,8 @@ async def admin_apply_cookies(request: Request) -> JSONResponse:
         result = await apply_cookie_payload(gemini, cookie_store, raw)
     except ValueError as exc:
         return JSONResponse(status_code=400, content={"error": str(exc)})
+    healer = getattr(request.app.state, "healer", None)
+    if healer is not None:
+        healer.nudge()  # if the fresh cookies still landed degraded, retry soon
     code = 200 if result.get("reinit_ok", True) else 502
     return JSONResponse(status_code=code, content=result)

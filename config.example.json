@@ -9,6 +9,7 @@
   "force_anonymous": false,
   "cookie_cache_dir": null,
   "auto_refresh": true,
+  "self_heal_interval": 600.0,
   "max_concurrent_generations": 3,
   "slot_wait_timeout": 60.0,
   "request_timeout": 180.0,

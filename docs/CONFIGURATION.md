@@ -50,6 +50,7 @@ the current working directory.
 | `cookie_refresh_interval` | number (s) | `600.0` | active | how often the library refreshes cookies/token in the background |
 | `cookie_cache_dir` | string (path) or null | `null` | active | where `gemini_webapi` keeps its rotated-cookie cache. `null` ⇒ a pre-set `$GEMINI_COOKIE_PATH`, else `{data_dir}/gemini_webapi` |
 | `auto_refresh` | boolean | `true` | active | let the library keep the session token fresh in the background. Turn **off** only when another process already owns refresh for the same account |
+| `self_heal_interval` | number (s) | `600.0` | active | if the client sits in a degraded (not-`AVAILABLE`) state, re-init it on this interval until it recovers — `gemini_webapi`'s own refresh loop stops the moment the account isn't `AVAILABLE`, so it can't self-recover. Each consecutive failure doubles the wait (cap 1h). `0` disables. Ignored when `force_anonymous` |
 | `max_concurrent_generations` | integer | `3` | active | how many generations may run against the one shared upstream connection at once (SRS 2.8). `2`–`4` recommended; `1` serialises all callers (a warning is logged) |
 | `slot_wait_timeout` | number (s) | `60.0` | active | how long a request waits for a generation slot before a `503` (`code: "capacity"`) |
 | `activity_log_retention_days` | integer | `7` | active | how long request-history rows are kept in `{data_dir}/activity.db` |
