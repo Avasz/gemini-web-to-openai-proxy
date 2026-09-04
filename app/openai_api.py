@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import time
 import uuid
 from typing import Any
@@ -30,6 +31,7 @@ from .generation import (
 from .errors import UpstreamError
 from .gemini_service import GeminiService
 from .model_selection import ModelNotAvailable
+from .request_opts import resolve_temporary
 from .sessions_api import resolve_session
 from .tools import choice_from_openai, tools_from_openai
 from .translation import messages_to_prompt
@@ -107,6 +109,23 @@ async def list_models(request: Request, _: None = Depends(require_api_key)) -> d
     return {"object": "list", "data": data}
 
 
+# A tool-call block (per the injected protocol) is a fenced ``tool_call`` /
+# ``json`` block or a reply that is a bare JSON object. Once the stream starts to
+# look like one we stop forwarding deltas so a raw fence never reaches the client
+# as visible content; ordinary ```python / ```bash code in a normal answer keeps
+# streaming.
+_TOOLCALL_FENCE_RE = re.compile(
+    r"(?:^|\n)[ \t]*```[ \t]*(?:tool_call|tool_code|toolcall|json)[ \t]*(?:\r?\n|\{)",
+    re.IGNORECASE,
+)
+
+
+def _looks_like_tool_call_start(text: str) -> bool:
+    if text.lstrip().startswith("{"):
+        return True
+    return bool(_TOOLCALL_FENCE_RE.search(text))
+
+
 def _tool_calls_payload(result: GenerationResult) -> list[dict[str, Any]]:
     return [
         {
@@ -172,7 +191,9 @@ async def _chat_stream(
     created = int(time.time())
     served_name = requested_model
     final_result: GenerationResult | None = None
-    suppress_deltas = bool(tools and tools.active)
+    tools_active = bool(tools and tools.active)
+    emitted = 0        # visible chars already streamed to the client
+    holding = False    # output started to look like a tool-call block -> buffer the rest
 
     def frame(delta: dict[str, Any], finish: str | None, extra: dict | None = None):
         payload = {
@@ -194,8 +215,18 @@ async def _chat_stream(
         ):
             final_result = running
             served_name = running.resolved.served_name
-            if delta_text and not suppress_deltas:
-                yield frame({"content": delta_text}, None)
+            if not tools_active:
+                if delta_text:
+                    yield frame({"content": delta_text}, None)
+                continue
+            # Tools active: stream ordinary prose through, but once the reply
+            # starts to look like a tool-call block, stop and buffer the rest.
+            text = running.text or ""
+            if not holding and _looks_like_tool_call_start(text):
+                holding = True
+            if not holding and len(text) > emitted:
+                yield frame({"content": text[emitted:]}, None)
+                emitted = len(text)
         if session is not None and warm_mgr is not None:
             warm_mgr.touch(session)
     except ModelNotAvailable as exc:
@@ -223,10 +254,15 @@ async def _chat_stream(
         if images:
             extra["images"] = images
         tool_calls = _tool_calls_payload(final_result)
+        if tools_active:
+            # Flush visible text we withheld: prose ahead of a tool-call block,
+            # or the whole reply if we started holding on a false alarm (no call
+            # was parsed out of it).
+            residual = (final_result.text or "")[emitted:]
+            if residual:
+                yield frame({"content": residual}, None)
         if tool_calls:
             finish = "tool_calls"
-            if suppress_deltas and final_result.text:
-                yield frame({"content": final_result.text}, None)
             yield frame({"tool_calls": tool_calls}, None)
     yield frame({}, finish, extra)
     yield "data: [DONE]\n\n"
@@ -251,7 +287,7 @@ async def chat_completions(
     cfg = request.app.state.config
     session = resolve_session(request, body.get("session_id"))
     requested_model = session.model_name if session else (body.get("model") or cfg.default_model)
-    temporary = bool(body.get("temporary_chat", cfg.temporary_chat_default))
+    temporary = resolve_temporary(request, body.get("temporary_chat"), cfg)
     stream = bool(body.get("stream", False))
 
     bundle = messages_to_prompt(messages, for_session=session is not None)

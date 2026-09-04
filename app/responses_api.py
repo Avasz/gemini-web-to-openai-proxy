@@ -31,6 +31,7 @@ from .generation import (
 )
 from .gemini_service import GeminiService
 from .model_selection import ModelNotAvailable
+from .request_opts import resolve_temporary
 from .sessions_api import resolve_session
 from .tools import choice_from_openai, tools_from_openai
 from .translation import responses_input_to_prompt
@@ -113,10 +114,12 @@ def _response_object(
     return obj
 
 
-def _parse_request(body: dict[str, Any], cfg) -> tuple[str, bool, bool, ToolContext, Any]:
+def _parse_request(
+    body: dict[str, Any], cfg, request: Request
+) -> tuple[str, bool, bool, ToolContext, Any]:
     requested_model = body.get("model") or cfg.default_model
     stream = bool(body.get("stream", False))
-    temporary = bool(body.get("temporary_chat", cfg.temporary_chat_default))
+    temporary = resolve_temporary(request, body.get("temporary_chat"), cfg)
     tools = ToolContext(
         specs=tools_from_openai(body.get("tools")),
         choice=choice_from_openai(body.get("tool_choice")),
@@ -140,7 +143,7 @@ async def create_response(
         raise HTTPException(status_code=400, detail="'input' is required.")
 
     cfg = request.app.state.config
-    requested_model, stream, temporary, tools, bundle = _parse_request(body, cfg)
+    requested_model, stream, temporary, tools, bundle = _parse_request(body, cfg, request)
     session = resolve_session(request, body.get("session_id"))
     if session:
         requested_model = session.model_name

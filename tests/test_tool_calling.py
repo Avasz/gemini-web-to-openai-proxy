@@ -91,6 +91,69 @@ def test_openai_tool_call_streaming(client_factory, fake_client):
     assert objs[-1]["choices"][0]["finish_reason"] == "tool_calls"
 
 
+def _stream_chat(c, body):
+    with c.stream("POST", "/v1/chat/completions", json=body) as r:
+        payloads = [
+            ln[len("data: "):]
+            for ln in r.iter_lines()
+            if ln.startswith("data: ") and ln != "data: [DONE]"
+        ]
+    return [json.loads(p) for p in payloads]
+
+
+def test_openai_streaming_prose_with_tools_active(client_factory, fake_client):
+    """A plain conversational reply must still stream back when tools are
+    attached (pi always attaches its toolset)."""
+    fake_client.next_reply = "Hello! How can I help you today?"
+    with client_factory() as c:
+        objs = _stream_chat(c, {
+            "model": "gemini-flash",
+            "stream": True,
+            "messages": [{"role": "user", "content": "hi"}],
+            "tools": [WEATHER_TOOL],
+        })
+    text = "".join(o["choices"][0]["delta"].get("content") or "" for o in objs)
+    assert text == "Hello! How can I help you today?"
+    assert objs[-1]["choices"][0]["finish_reason"] == "stop"
+    assert not any(o["choices"][0]["delta"].get("tool_calls") for o in objs)
+
+
+def test_openai_streaming_prose_before_tool_call(client_factory, fake_client):
+    fake_client.next_reply = (
+        'Let me check that for you.\n'
+        '```tool_call\n{"name": "get_weather", "arguments": {"city": "Paris"}}\n```'
+    )
+    with client_factory() as c:
+        objs = _stream_chat(c, {
+            "model": "gemini-flash",
+            "stream": True,
+            "messages": [{"role": "user", "content": "weather in Paris?"}],
+            "tools": [WEATHER_TOOL],
+        })
+    text = "".join(o["choices"][0]["delta"].get("content") or "" for o in objs)
+    assert "Let me check that for you." in text
+    assert "```" not in text
+    tc_frame = next(o for o in objs if o["choices"][0]["delta"].get("tool_calls"))
+    assert tc_frame["choices"][0]["delta"]["tool_calls"][0]["function"]["name"] == "get_weather"
+    assert objs[-1]["choices"][0]["finish_reason"] == "tool_calls"
+
+
+def test_openai_streaming_code_block_not_swallowed(client_factory, fake_client):
+    """An ordinary fenced code block in a normal answer is not mistaken for a
+    tool call and still streams."""
+    fake_client.next_reply = "Run this:\n```bash\nls -la\n```\nThat lists files."
+    with client_factory() as c:
+        objs = _stream_chat(c, {
+            "model": "gemini-flash",
+            "stream": True,
+            "messages": [{"role": "user", "content": "how do I list files?"}],
+            "tools": [WEATHER_TOOL],
+        })
+    text = "".join(o["choices"][0]["delta"].get("content") or "" for o in objs)
+    assert text == "Run this:\n```bash\nls -la\n```\nThat lists files."
+    assert objs[-1]["choices"][0]["finish_reason"] == "stop"
+
+
 def test_google_function_call(client_factory, fake_client):
     fake_client.next_reply = '```tool_call\n{"name": "get_weather", "arguments": {"city": "Berlin"}}\n```'
     with client_factory() as c:

@@ -451,6 +451,14 @@ history (`activity.db`): that always records that a request happened (model,
 latency, ok/fail; never the prompt text). For true end-to-end non-logging, use
 temporary chat *and* keep `activity_log_retention_days` low.
 
+Clients that can't add fields to the request body (agent harnesses like pi only
+let you pin static **headers** per provider) can send the
+**`X-Gemini-Temporary`** header instead: `1`/`true`/`yes`/`on` forces temporary,
+`0`/`false`/`no`/`off` forces a persistent chat even when
+`temporary_chat_default` is true. The header wins over both the body field and
+the config default, so a plain OpenAI client hitting the same proxy is
+unaffected. See [Connecting pi and other agent harnesses](#connecting-pi-and-other-agent-harnesses).
+
 ### CLI flags
 
 ```
@@ -553,6 +561,108 @@ Once logged in, the dashboard also shows your account's live quota, no
 need to guess how much you've used:
 
 ![Quota & Usage panel](docs/images/admin-quota-usage.png)
+
+---
+
+## Connecting pi and other agent harnesses
+
+[pi](https://github.com/parsee-ai/pi) (and opencode, Cline, and most other
+OpenAI-compatible coding agents) talk to this proxy as a custom provider. There
+is no native function-calling protocol on Gemini Web, so tool calling is done by
+prompt injection — it works, but treat it as best-effort.
+
+### Add the provider
+
+pi reads `~/.pi/agent/models.json`. Add one provider block:
+
+```json
+{
+  "providers": {
+    "geminiweb-proxy": {
+      "baseUrl": "http://SERVER-IP:8085/v1",
+      "apiKey": "sk-anything",
+      "api": "openai-completions",
+      "headers": {
+        "X-Gemini-Temporary": "true"
+      },
+      "models": [
+        { "id": "gemini-pro",        "name": "Gemini Pro",              "contextWindow": 1000000 },
+        { "id": "gemini-pro-high",   "name": "Gemini Pro (thinking)",   "contextWindow": 1000000 },
+        { "id": "gemini-flash",      "name": "Gemini Flash",            "contextWindow": 1000000 },
+        { "id": "gemini-flash-high", "name": "Gemini Flash (thinking)", "contextWindow": 1000000 },
+        { "id": "gemini-flash-lite", "name": "Gemini Flash-Lite",       "contextWindow": 1000000 }
+      ]
+    }
+  }
+}
+```
+
+- **`baseUrl`** must end in `/v1`. For a remote box the proxy has to be bound to
+  `0.0.0.0` (the Docker image already is; a bare `python -m app` run defaults to
+  `127.0.0.1`).
+- **`apiKey`** — if `api_keys` is empty in `config.json` the generation
+  endpoints are open and any non-empty string works; otherwise it must match one
+  of the configured keys (sent as `Authorization: Bearer`).
+- **Model ids** — use whatever `GET /v1/models` reports for *your* account;
+  only ids with `is_available: true` will generate. Append `-high` to turn on
+  extended thinking (`-low` / `-medium` are accepted but map to thinking-off).
+
+  ```bash
+  curl -s http://SERVER-IP:8085/v1/models -H "Authorization: Bearer sk-anything" | jq '.data[].id'
+  ```
+
+### Temporary vs. logged chats
+
+Agent harnesses fire a lot of short turns and each one starts a fresh Gemini web
+conversation (the proxy is stateless — the client resends the full transcript
+every turn, which is why context still works). To keep that clutter **out of
+your Google account's chat history**, set the header in the provider block:
+
+| `headers` value | Effect |
+|---|---|
+| `"X-Gemini-Temporary": "true"` | every request from this provider is a Gemini *temporary chat* — not saved to web history |
+| `"X-Gemini-Temporary": "false"` | force persistent chats even if `temporary_chat_default` is true server-side |
+| header omitted | falls back to the request body / `temporary_chat_default` config |
+
+The header only affects requests carrying it, so other clients on the same proxy
+are unchanged. It does **not** disable this proxy's own `activity.db` (model +
+latency + ok/fail, never prompt text) — lower `activity_log_retention_days` for
+that.
+
+### Picking a model for agent work
+
+Tool calling is **prompt-injected** — Gemini Web has no native function-calling
+protocol, so the proxy describes the tools in the prompt and parses the model's
+reply back into OpenAI `tool_calls`. How reliably that works depends on the
+model:
+
+| Model | Chat | Tool calls / file edits | Use for |
+|---|---|---|---|
+| `gemini-flash-lite` | fine | **unreliable** — often ignores the tool syntax | quick Q&A, not agent loops |
+| `gemini-flash` | good | works | the default choice for pi — read/edit/write/bash loops |
+| `gemini-flash-high` | good | works, slower | same, when you want extended thinking |
+| `gemini-pro` / `-high` | best | works | harder multi-step reasoning; higher quota cost |
+
+Rule of thumb: **`gemini-flash` for agentic work**, `gemini-pro` when a task
+needs deeper reasoning, `gemini-flash-lite` only for plain chat.
+
+### What to expect
+
+- **It is genuinely agentic** — the harness runs the tool loop and the proxy
+  keeps Gemini in the OpenAI tool-call shape. "Read these files, make this
+  change, run the tests" works.
+- **Best-effort, not native.** One tool call per turn, no parallel calls, no
+  strict schema enforcement, and `tool_choice: "required"` is less dependable
+  than `auto`. A turn where the model answers from memory instead of calling a
+  tool still happens; the reply is now always visible (never a blank turn), but
+  a missed call is a missed call — nudge it and retry.
+- **Long sessions grow.** Every turn re-sends and re-parses the whole transcript
+  (no prompt caching on this path), so latency and quota use climb with
+  conversation length. Start a fresh session per unrelated task.
+- **Other harnesses** (opencode, Cline, Aider in OpenAI mode, custom scripts
+  using the OpenAI SDK) work the same way — point their OpenAI base URL at
+  `http://SERVER-IP:8085/v1`, set any non-empty key, and add the
+  `X-Gemini-Temporary` header if the client allows custom headers.
 
 ---
 

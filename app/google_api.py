@@ -30,6 +30,7 @@ from .generation import (
 )
 from .gemini_service import GeminiService
 from .model_selection import ModelNotAvailable
+from .request_opts import resolve_temporary
 from .sessions_api import resolve_session
 from .tools import choice_from_google, tools_from_google
 from .translation import google_contents_to_prompt
@@ -285,7 +286,7 @@ async def generate(
     cfg = request.app.state.config
     if not requested_model:
         requested_model = cfg.default_model
-    temporary = bool(body.get("temporaryChat", cfg.temporary_chat_default))
+    temporary = resolve_temporary(request, body.get("temporaryChat"), cfg)
     session = resolve_session(request, body.get("sessionId") or body.get("session_id"))
     if session:
         requested_model = session.model_name
