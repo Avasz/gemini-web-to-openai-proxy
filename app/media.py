@@ -64,8 +64,11 @@ def sniff_mime(data: bytes) -> tuple[str, str] | None:
         return "image/jpeg", ".jpg"
     if data[:6] in (b"GIF87a", b"GIF89a"):
         return "image/gif", ".gif"
-    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
-        return "image/webp", ".webp"
+    if data[:4] == b"RIFF":
+        if data[8:12] == b"WEBP":
+            return "image/webp", ".webp"
+        if data[8:12] == b"WAVE":
+            return "audio/wav", ".wav"
     if data[:2] == b"BM":
         return "image/bmp", ".bmp"
     if data[:4] in (b"II*\x00", b"MM\x00*"):
@@ -76,6 +79,18 @@ def sniff_mime(data: bytes) -> tuple[str, str] | None:
             return "image/avif", ".avif"
         if brand in (b"heic", b"heix", b"hevc", b"heim", b"heis", b"mif1", b"msf1"):
             return "image/heic", ".heic"
+        if brand in (b"M4A ", b"M4B ", b"mp42", b"isom"):
+            return "audio/mp4", ".m4a"
+    if data[:3] == b"ID3":
+        return "audio/mpeg", ".mp3"
+    if data[:4] == b"OggS":
+        return "audio/ogg", ".ogg"
+    if data[:4] == b"fLaC":
+        return "audio/flac", ".flac"
+    if data[0] == 0xFF and (data[1] & 0xF6) == 0xF0:
+        return "audio/aac", ".aac"
+    if data[0] == 0xFF and (data[1] & 0xE0) == 0xE0 and (data[1] & 0x06) != 0x00:
+        return "audio/mpeg", ".mp3"
     return None
 
 

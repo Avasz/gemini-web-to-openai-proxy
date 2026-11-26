@@ -21,10 +21,10 @@ for session/protocol handling.
 |---|---|
 | **Authenticated account** | runs as your own Google account's Gemini session, using your browser's session cookies, no Google API key, no billing account. Sign in by adding your cookies; see [Cookie file](#cookie-file) for how. Without cookies configured, it still runs, just on Gemini's free anonymous tier. |
 | **API access control** | optionally lock down `/v1/*` and `/v1beta/*` behind your own API key(s); open by default (with a startup warning) if you don't set any. Separate entirely from the admin credential. See [Authentication](#authentication) below. |
-| **Models** | live per-account list, fetched from `GET /v1/models` (or `GET /v1beta/models` on the Google-native side); `-high` suffix → extended thinking; unknown model → 4xx with the real list, never a silent swap |
-| **OpenAI** | `/v1/chat/completions` + `/v1/responses` (independent surfaces), streaming, multimodal in/out, prompt-engineered tool calling |
+| **Models** | live per-account list, fetched from `GET /v1/models` (or `GET /v1beta/models` on the Google-native side); `-high` suffix → extended thinking; automatic alias & fallback to `gemini-auto`; unknown model → 4xx with the real list or fallback to default |
+| **OpenAI** | `/v1/chat/completions` + `/v1/responses` (independent surfaces), streaming, multimodal in/out (images, audio/music), prompt-engineered tool calling |
 | **Google-native** | `/v1beta` model list + `generateContent` + `streamGenerateContent` (`?alt=sse` or JSON array) |
-| **Images** | both directions: send an image with your prompt (by URL or inline base64), and get one back if Gemini's reply includes one (returned inline, base64-encoded, not just a link). MIME is sniffed from the file's actual bytes, not trusted from what you label it. See the image fields under [`POST /v1/chat/completions`](docs/API.md#post-v1chatcompletions) (OpenAI) or [`POST .../generateContent`](docs/API.md#post-v1betamodelsmodelgeneratecontent) (Google) in `docs/API.md` for the exact request/response shape. |
+| **Multimodal (Images & Audio/Music)** | send images or audio/music files (MP3, WAV, OGG, FLAC, M4A, AAC via OpenAI `input_audio` or inline `data:` URI) with your prompt, and get generated images back if Gemini's reply includes them (returned inline, base64-encoded). Audio/image format is sniffed from the actual file magic bytes. See [`POST /v1/chat/completions`](docs/API.md#post-v1chatcompletions) in `docs/API.md` for request/response shapes. |
 | **Metadata** | every response carries `x_gemini_proxy`: the *validated* served model (not the model's self-claim) plus other request-level detail |
 | **Credit / quota tracking** | when the account exposes it, live usage (`usage_info`/`quotas`) shows up in `x_gemini_proxy` on every response and as its own panel on the admin dashboard, no separate call needed. This comes straight from what `gemini_webapi` reads off the account; it's confirmed working on a Google AI Pro account, unconfirmed whether Google surfaces the same usage/credit data for free-tier accounts, if it doesn't, this field will simply be empty for you rather than erroring. |
 | **Reliability** | one shared connection, capped at `max_concurrent_generations`; over the cap gets a `503` and should be retried |
@@ -103,7 +103,7 @@ from openai import OpenAI
 client = OpenAI(base_url="http://localhost:8000/v1", api_key="unused")
 
 response = client.chat.completions.create(
-    model="gemini-flash",
+    model="gemini-auto",
     messages=[{"role": "user", "content": "hi"}],
 )
 print(response.choices[0].message.content)
@@ -113,7 +113,7 @@ Streaming:
 
 ```python
 stream = client.chat.completions.create(
-    model="gemini-flash",
+    model="gemini-auto",
     messages=[{"role": "user", "content": "write a haiku about rivers"}],
     stream=True,
 )
@@ -134,7 +134,7 @@ const client = new OpenAI({
 });
 
 const response = await client.chat.completions.create({
-  model: "gemini-flash",
+  model: "gemini-auto",
   messages: [{ role: "user", content: "hi" }],
 });
 console.log(response.choices[0].message.content);
@@ -145,7 +145,7 @@ console.log(response.choices[0].message.content);
 ```bash
 curl -s http://localhost:8000/v1/chat/completions \
   -H "Content-Type: application/json" \
-  -d '{"model": "gemini-flash", "messages": [{"role": "user", "content": "hi"}]}' \
+  -d '{"model": "gemini-auto", "messages": [{"role": "user", "content": "hi"}]}' \
   | python -m json.tool
 ```
 
@@ -306,7 +306,7 @@ the current working directory.
 | `host` | string | `"127.0.0.1"` | listen address (overridden by `--host`) |
 | `port` | integer | `8000` | listen port (overridden by `--port`) |
 | `request_timeout` | number (s) | `180.0` | hard ceiling on a single non-streaming generation, then `504` |
-| `default_model` | string | `"gemini-flash"` | model used when a request omits `model` |
+| `default_model` | string | `"gemini-auto"` | model used when a request omits `model` (falls back to account default) |
 | `api_keys` | string[] | `[]` | generation-endpoint keys; empty means endpoints are open (startup warning) |
 | `cookie_file` | string (path) | `"cookies.json"` | Gemini Web session cookie export (see below) |
 | `temporary_chat_default` | boolean | `false` | default for "don't save to Gemini account history"; per-request override exists |
@@ -586,9 +586,10 @@ pi reads `~/.pi/agent/models.json`. Add one provider block:
         "X-Gemini-Temporary": "true"
       },
       "models": [
+        { "id": "gemini-auto",       "name": "Gemini Auto (Default)",   "contextWindow": 1000000 },
         { "id": "gemini-pro",        "name": "Gemini Pro",              "contextWindow": 1000000 },
         { "id": "gemini-pro-high",   "name": "Gemini Pro (thinking)",   "contextWindow": 1000000 },
-        { "id": "gemini-flash",      "name": "Gemini Flash",            "contextWindow": 1000000 },
+        { "id": "gemini-flash",      "name": "Gemini Flash (legacy alias)", "contextWindow": 1000000 },
         { "id": "gemini-flash-high", "name": "Gemini Flash (thinking)", "contextWindow": 1000000 },
         { "id": "gemini-flash-lite", "name": "Gemini Flash-Lite",       "contextWindow": 1000000 }
       ]
@@ -638,12 +639,13 @@ model:
 
 | Model | Chat | Tool calls / file edits | Use for |
 |---|---|---|---|
+| `gemini-auto` | good | works | modern default for general reasoning and agent loops |
+| `gemini-flash` | good | works | legacy flash alias (automatically routed to account default) |
 | `gemini-flash-lite` | fine | **unreliable** — often ignores the tool syntax | quick Q&A, not agent loops |
-| `gemini-flash` | good | works | the default choice for pi — read/edit/write/bash loops |
-| `gemini-flash-high` | good | works, slower | same, when you want extended thinking |
+| `gemini-flash-high` | good | works, slower | extended thinking mode |
 | `gemini-pro` / `-high` | best | works | harder multi-step reasoning; higher quota cost |
 
-Rule of thumb: **`gemini-flash` for agentic work**, `gemini-pro` when a task
+Rule of thumb: **`gemini-auto` (or `gemini-flash`) for agentic work**, `gemini-pro` when a task
 needs deeper reasoning, `gemini-flash-lite` only for plain chat.
 
 ### What to expect

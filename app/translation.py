@@ -60,6 +60,12 @@ def _text_from_content(content: Any, images: list[ImageRef]) -> str:
                 if url:
                     detail = img.get("detail") if isinstance(img, dict) else None
                     images.append(ImageRef(url=str(url), detail=detail))
+            elif ptype == "input_audio":
+                audio = part.get("input_audio")
+                if isinstance(audio, dict) and audio.get("data"):
+                    fmt = str(audio.get("format") or "mp3").strip().lower().lstrip(".")
+                    mime = "audio/mpeg" if fmt == "mp3" else f"audio/{fmt}"
+                    images.append(ImageRef(url=f"data:{mime};base64,{audio['data']}"))
         return "\n".join(c for c in chunks if c)
     return str(content)
 

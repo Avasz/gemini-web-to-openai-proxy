@@ -34,6 +34,22 @@ def test_multimodal_parts_split_out():
     assert [i.url for i in b.images] == ["https://x/y.png"]
 
 
+def test_input_audio_part_extracted():
+    b = messages_to_prompt(
+        [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "Transcribe"},
+                    {"type": "input_audio", "input_audio": {"data": "SUQz", "format": "mp3"}},
+                ],
+            }
+        ]
+    )
+    assert "Transcribe" in b.prompt
+    assert [i.url for i in b.images] == ["data:audio/mpeg;base64,SUQz"]
+
+
 def test_tool_messages_render_as_text():
     b = messages_to_prompt(
         [

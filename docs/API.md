@@ -161,7 +161,7 @@ for. If it can't honor your request, it tells you, it doesn't guess.
 
 ### If you don't specify a model
 
-The `default_model` from `config.json` is used (ships as `gemini-flash`).
+The `default_model` from `config.json` is used (ships as `gemini-auto`). Common aliases like `gemini-2.5-flash` map directly to `gemini-auto`, and requests with omitted or unconfigured model names safely fall back to the account default model.
 
 ---
 
@@ -345,6 +345,7 @@ currently ignored, Gemini Web has no equivalent knobs to forward them to.
 | `content` | either a plain string, or an array of typed parts (below) |
 | `content[]` text part | `{"type": "text", "text": "…"}` (also accepts `input_text` / `output_text`, or really any part that has a `text` key) |
 | `content[]` image part | `{"type": "image_url", "image_url": {"url": "<http(s) or data: URL>", "detail": "…"}}`. The image is fetched (for an `http(s)` URL) or decoded (for a `data:` URL) server-side and attached to the prompt. The real MIME type is sniffed from the file's own bytes, not trusted from whatever you claim; a caller-supplied type is ignored. If one image fails to fetch or isn't recognized, that single image is skipped (the request still proceeds) and the reason shows up in `x_gemini_proxy.input_image_errors`. |
+| `content[]` audio / music part | `{"type": "input_audio", "input_audio": {"data": "<base64>", "format": "mp3"}}` or inline audio data URI `{"type": "image_url", "image_url": {"url": "data:audio/mp3;base64,…"}}`. Decoded and attached directly to the Gemini Web conversation. Supported formats: MP3, WAV, OGG, FLAC, M4A, AAC. The true audio format is verified from file magic bytes. |
 | `tool_calls` (on an assistant message) | rendered into the prompt as a readable text trace, so the model can see its own prior call |
 | `name` / `tool_call_id` (on a tool/function message) | prefixed onto the content in that same trace |
 

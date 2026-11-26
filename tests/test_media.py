@@ -14,6 +14,11 @@ def test_sniff_common_formats():
     assert sniff_mime(b"RIFF\x00\x00\x00\x00WEBP" + b"\x00" * 4)[0] == "image/webp"
     assert sniff_mime(b"\x00\x00\x00\x18ftypavif" + b"\x00" * 8)[0] == "image/avif"
     assert sniff_mime(b"\x00\x00\x00\x18ftypheic" + b"\x00" * 8)[0] == "image/heic"
+    assert sniff_mime(b"ID3\x04\x00\x00" + b"\x00" * 10) == ("audio/mpeg", ".mp3")
+    assert sniff_mime(b"RIFF\x00\x00\x00\x00WAVE" + b"\x00" * 4) == ("audio/wav", ".wav")
+    assert sniff_mime(b"OggS" + b"\x00" * 12) == ("audio/ogg", ".ogg")
+    assert sniff_mime(b"fLaC" + b"\x00" * 12) == ("audio/flac", ".flac")
+    assert sniff_mime(b"\x00\x00\x00\x18ftypM4A " + b"\x00" * 8) == ("audio/mp4", ".m4a")
     assert sniff_mime(b"not an image at all") is None
 
 
