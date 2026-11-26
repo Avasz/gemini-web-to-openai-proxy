@@ -43,7 +43,11 @@ async def build_full_status(app) -> dict[str, Any]:
             pass
         try:
             if default_model:
-                default_model = client.resolve_model(default_model).display_name
+                from .model_selection import resolve
+
+                default_model = resolve(
+                    client, default_model, fallback_to_default=True
+                ).model.display_name
         except Exception:  # noqa: BLE001
             pass
         try:

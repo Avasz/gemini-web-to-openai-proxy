@@ -182,6 +182,7 @@ async def _stream_google(
     sse: bool,
     tools: ToolContext | None = None,
     chat: Any = None,
+    allow_default_fallback: bool = False,
 ):
     served_name = requested_model
     final: GenerationResult | None = None
@@ -197,6 +198,7 @@ async def _stream_google(
         async for delta_text, running in stream_generation(
             service, requested_model, bundle, temporary=temporary, tools=tools,
             surface="streamGenerateContent", chat=chat,
+            allow_default_fallback=allow_default_fallback,
         ):
             final = running
             served_name = running.resolved.served_name
@@ -284,12 +286,14 @@ async def generate(
         raise HTTPException(status_code=400, detail="Request body must be a JSON object.")
 
     cfg = request.app.state.config
+    allow_default_fallback = not requested_model
     if not requested_model:
         requested_model = cfg.default_model
     temporary = resolve_temporary(request, body.get("temporaryChat"), cfg)
     session = resolve_session(request, body.get("sessionId") or body.get("session_id"))
     if session:
         requested_model = session.model_name
+        allow_default_fallback = False
     chat = session.chat if session else None
 
     bundle = google_contents_to_prompt(
@@ -310,7 +314,8 @@ async def generate(
     if action == "streamGenerateContent":
         sse = request.query_params.get("alt", "").lower() == "sse"
         return StreamingResponse(
-            _stream_google(service, requested_model, bundle, temporary, sse, tools, chat),
+            _stream_google(service, requested_model, bundle, temporary, sse, tools, chat,
+                           allow_default_fallback),
             media_type="text/event-stream" if sse else "application/json",
         )
 
@@ -318,6 +323,7 @@ async def generate(
         result = await run_generation(
             service, requested_model, bundle, temporary=temporary, tools=tools,
             surface="generateContent", chat=chat,
+            allow_default_fallback=allow_default_fallback,
         )
         if session:
             request.app.state.warm_sessions.touch(session)

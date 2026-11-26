@@ -62,12 +62,13 @@ async def start_session(request: Request) -> dict:
     if not isinstance(body, dict):
         body = {}
 
-    requested = body.get("model") or cfg.default_model
+    explicit_model = body.get("model")
+    requested = explicit_model or cfg.default_model
     priming = body.get("priming_message") or body.get("priming") or None
 
     try:
         client = await service.get_client()
-        resolved = resolve(client, requested)
+        resolved = resolve(client, requested, fallback_to_default=not explicit_model)
     except ModelNotAvailable as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:  # noqa: BLE001

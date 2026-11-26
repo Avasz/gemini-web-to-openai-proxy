@@ -1,7 +1,7 @@
 import pytest
 
 from app.model_selection import ModelNotAvailable, resolve, split_reasoning_suffix
-from tests.conftest import FakeClient
+from tests.conftest import FakeClient, FakeModel
 
 
 @pytest.mark.parametrize(
@@ -29,3 +29,20 @@ def test_resolve_unknown_lists_available():
         resolve(FakeClient(), "gpt-4o")
     assert "gemini-flash" in ei.value.available
     assert "gemini-pro" in ei.value.available
+
+
+def test_resolve_fallback_prefers_gemini_auto():
+    client = FakeClient()
+    client._models = [
+        FakeModel("gemini-pro", "bbb", ["pro"], is_available=False),
+        FakeModel("gemini-auto", "ccc", ["auto"], is_available=True),
+    ]
+    r = resolve(client, "gemini-flash-high", fallback_to_default=True)
+    assert r.served_name == "gemini-auto"
+    assert r.extended_thinking is True
+
+
+def test_resolve_auto_alias_falls_back_to_first_available():
+    r = resolve(FakeClient(), "default-high")
+    assert r.served_name == "gemini-flash"
+    assert r.extended_thinking is True

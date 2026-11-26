@@ -186,6 +186,7 @@ async def _chat_stream(
     chat: Any = None,
     session: Any = None,
     warm_mgr: Any = None,
+    allow_default_fallback: bool = False,
 ):
     chunk_id = f"chatcmpl-{uuid.uuid4().hex}"
     created = int(time.time())
@@ -212,6 +213,7 @@ async def _chat_stream(
         async for delta_text, running in stream_generation(
             service, requested_model, bundle, temporary=temporary, tools=tools,
             surface="chat.completions", chat=chat,
+            allow_default_fallback=allow_default_fallback,
         ):
             final_result = running
             served_name = running.resolved.served_name
@@ -286,7 +288,9 @@ async def chat_completions(
 
     cfg = request.app.state.config
     session = resolve_session(request, body.get("session_id"))
-    requested_model = session.model_name if session else (body.get("model") or cfg.default_model)
+    explicit_model = body.get("model")
+    requested_model = session.model_name if session else (explicit_model or cfg.default_model)
+    allow_default_fallback = not session and not explicit_model
     temporary = resolve_temporary(request, body.get("temporary_chat"), cfg)
     stream = bool(body.get("stream", False))
 
@@ -305,7 +309,7 @@ async def chat_completions(
     if stream:
         return StreamingResponse(
             _chat_stream(service, requested_model, bundle, temporary, tools, chat, session,
-                         request.app.state.warm_sessions),
+                         request.app.state.warm_sessions, allow_default_fallback),
             media_type="text/event-stream",
         )
 
@@ -313,6 +317,7 @@ async def chat_completions(
         result = await run_generation(
             service, requested_model, bundle, temporary=temporary, tools=tools,
             surface="chat.completions", chat=chat,
+            allow_default_fallback=allow_default_fallback,
         )
         if session:
             request.app.state.warm_sessions.touch(session)

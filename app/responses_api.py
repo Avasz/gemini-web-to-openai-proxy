@@ -144,9 +144,11 @@ async def create_response(
 
     cfg = request.app.state.config
     requested_model, stream, temporary, tools, bundle = _parse_request(body, cfg, request)
+    allow_default_fallback = not body.get("model")
     session = resolve_session(request, body.get("session_id"))
     if session:
         requested_model = session.model_name
+        allow_default_fallback = False
         bundle = responses_input_to_prompt(
             body.get("input"), body.get("instructions"), for_session=True
         )
@@ -159,7 +161,7 @@ async def create_response(
     if stream:
         return StreamingResponse(
             _response_stream(service, requested_model, bundle, temporary, tools, body, chat,
-                             session, request.app.state.warm_sessions),
+                             session, request.app.state.warm_sessions, allow_default_fallback),
             media_type="text/event-stream",
         )
 
@@ -167,6 +169,7 @@ async def create_response(
         result = await run_generation(
             service, requested_model, bundle, temporary=temporary, tools=tools,
             surface="responses", chat=chat,
+            allow_default_fallback=allow_default_fallback,
         )
         if session:
             request.app.state.warm_sessions.touch(session)
@@ -211,6 +214,7 @@ async def _response_stream(
     chat: Any = None,
     session: Any = None,
     warm_mgr: Any = None,
+    allow_default_fallback: bool = False,
 ):
     resp_id = f"resp_{uuid.uuid4().hex}"
     body = {**body, "_resp_id": resp_id}
@@ -247,6 +251,7 @@ async def _response_stream(
         async for delta_text, running in stream_generation(
             service, requested_model, bundle, temporary=temporary, tools=tools,
             surface="responses", chat=chat,
+            allow_default_fallback=allow_default_fallback,
         ):
             final = running
             if not delta_text or suppress:
@@ -307,7 +312,14 @@ async def _response_stream(
         return
 
     if final is None:
-        final = GenerationResult(text="", resolved=(await _cheap_resolved(service, requested_model)))
+        final = GenerationResult(
+            text="",
+            resolved=(
+                await _cheap_resolved(
+                    service, requested_model, allow_default_fallback=allow_default_fallback
+                )
+            ),
+        )
     elif session is not None and warm_mgr is not None:
         warm_mgr.touch(session)
 
@@ -375,8 +387,10 @@ async def _response_stream(
     yield event("response.completed", {"response": completed})
 
 
-async def _cheap_resolved(service: GeminiService, requested_model: str):
+async def _cheap_resolved(
+    service: GeminiService, requested_model: str, *, allow_default_fallback: bool = False
+):
     from .model_selection import resolve
 
     client = await service.get_client()
-    return resolve(client, requested_model)
+    return resolve(client, requested_model, fallback_to_default=allow_default_fallback)

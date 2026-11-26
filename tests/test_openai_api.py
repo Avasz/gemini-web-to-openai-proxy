@@ -57,6 +57,17 @@ def test_default_model_used_when_omitted(client_factory):
         assert r.json()["model"] == "gemini-pro"
 
 
+def test_omitted_model_falls_back_to_gemini_auto_when_default_missing(client_factory, fake_client):
+    from tests.conftest import FakeModel
+
+    fake_client._models = [FakeModel("gemini-auto", "ccc", ["auto"], is_available=True)]
+    with client_factory(default_model="gemini-flash") as c:
+        r = c.post("/v1/chat/completions", json={"messages": [{"role": "user", "content": "x"}]})
+        assert r.status_code == 200
+        assert r.json()["model"] == "gemini-auto"
+        assert r.json()["x_gemini_proxy"]["served_model"] == "gemini-auto"
+
+
 def test_streaming(client_factory):
     with client_factory() as c:
         with c.stream(

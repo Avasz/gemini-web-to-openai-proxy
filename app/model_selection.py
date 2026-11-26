@@ -66,17 +66,43 @@ def split_reasoning_suffix(name: str) -> tuple[str, bool]:
     return lowered, False
 
 
+_AUTO_ALIASES = frozenset({"auto", "default"})
+
+
 def available_model_names(client: GeminiClient) -> list[str]:
     models = client.list_models() or []
     return [m.model_name for m in models]
 
 
-def resolve(client: GeminiClient, requested: str) -> ResolvedModel:
+def _pick_default_model(client: GeminiClient) -> AvailableModel | None:
+    try:
+        auto = client.resolve_model("gemini-auto")
+        if auto.is_available:
+            return auto
+    except ValueError:
+        pass
+    models = client.list_models() or []
+    for m in models:
+        if m.is_available:
+            return m
+    return models[0] if models else None
+
+
+def resolve(
+    client: GeminiClient, requested: str, *, fallback_to_default: bool = False
+) -> ResolvedModel:
     base_name, extended_thinking = split_reasoning_suffix(requested)
     try:
         model = client.resolve_model(base_name)
     except ValueError as exc:  # library raises plain ValueError
-        raise ModelNotAvailable(requested, available_model_names(client)) from exc
+        if fallback_to_default or base_name.lower() in _AUTO_ALIASES:
+            fallback = _pick_default_model(client)
+            if fallback is not None:
+                model = fallback
+            else:
+                raise ModelNotAvailable(requested, available_model_names(client)) from exc
+        else:
+            raise ModelNotAvailable(requested, available_model_names(client)) from exc
     return ResolvedModel(
         requested=requested,
         base_name=base_name,

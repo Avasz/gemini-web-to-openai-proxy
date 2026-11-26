@@ -154,9 +154,14 @@ def served_model_metadata(
     return meta
 
 
-async def _resolve(service: GeminiService, requested: str) -> tuple[Any, ResolvedModel]:
+async def _resolve(
+    service: GeminiService,
+    requested: str,
+    *,
+    allow_default_fallback: bool = False,
+) -> tuple[Any, ResolvedModel]:
     client = await service.get_client()
-    resolved = resolve(client, requested)
+    resolved = resolve(client, requested, fallback_to_default=allow_default_fallback)
     # Fail before the network call when the account plainly can't use this model
     # (e.g. a non-default model on a guest session). Same signal the library would
     # raise GeminiError on, surfaced as a clean 4xx instead of a traceback.
@@ -179,11 +184,14 @@ async def run_generation(
     tools: ToolContext | None = None,
     surface: str = "",
     chat: Any = None,
+    allow_default_fallback: bool = False,
 ) -> GenerationResult:
     started = time.time()
     prompt_chars = len(bundle.prompt)
     try:
-        client, resolved = await _resolve(service, requested_model)
+        client, resolved = await _resolve(
+            service, requested_model, allow_default_fallback=allow_default_fallback
+        )
         prompt = _prompt_with_tools(bundle, tools)
         async with _prepared_input(service, bundle) as prepared:
             async with _gate_slot(service):
@@ -241,6 +249,7 @@ async def stream_generation(
     tools: ToolContext | None = None,
     surface: str = "",
     chat: Any = None,
+    allow_default_fallback: bool = False,
 ) -> AsyncIterator[tuple[str, GenerationResult]]:
     """Yield ``(delta_text, running_result)`` tuples. The final tuple carries the
     complete text, tool calls and metadata.
@@ -254,7 +263,9 @@ async def stream_generation(
     final: GenerationResult | None = None
     raw_images: list = []
     try:
-        client, resolved = await _resolve(service, requested_model)
+        client, resolved = await _resolve(
+            service, requested_model, allow_default_fallback=allow_default_fallback
+        )
         prompt = _prompt_with_tools(bundle, tools)
         async with _prepared_input(service, bundle) as prepared, _gate_slot(service):
             try:

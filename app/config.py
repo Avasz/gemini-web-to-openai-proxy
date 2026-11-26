@@ -28,7 +28,7 @@ DEFAULTS: dict[str, Any] = {
     "host": "127.0.0.1",
     "port": 8000,
     # Model
-    "default_model": "gemini-flash",
+    "default_model": "gemini-auto",
     # Auth for generation endpoints; empty list => open (warned at startup)
     "api_keys": [],
     # Cookie source for the Gemini Web session
