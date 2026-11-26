@@ -11,7 +11,8 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /app
 
-# Dependencies first for layer caching
+# Dependencies first for layer caching (git needed for pinned gemini_webapi commit)
+RUN apt-get update && apt-get install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/*
 COPY pyproject.toml README.md ./
 COPY app ./app
 RUN pip install .

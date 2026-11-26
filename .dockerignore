@@ -7,6 +7,9 @@ __pycache__
 tests
 scripts
 data
+gwop-data
+gop-data
+deploy
 config.json
 cookies.json
 *.cookies.json

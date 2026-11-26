@@ -1,5 +1,5 @@
 fastapi>=0.115,<1.0
 uvicorn[standard]>=0.30,<1.0
-gemini_webapi>=2.1,<2.2
+gemini_webapi @ git+https://github.com/HanaokaYuzu/Gemini-API.git@42f89a77308e4f809c399f4899f8c0d830e7b46d
 httpx>=0.27,<1.0
 pydantic>=2.7,<3.0
