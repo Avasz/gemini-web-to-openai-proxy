@@ -36,3 +36,29 @@ def test_cache_dir_env_is_set_under_data_dir(tmp_path):
     svc = _svc(tmp_path)
     assert os.environ["GEMINI_COOKIE_PATH"] == str(svc._cookie_cache_dir)
     assert svc._cookie_cache_dir.is_dir()
+
+
+async def test_poisoned_cookie_cache_is_cleared_and_retried(tmp_path, monkeypatch):
+    svc = _svc(tmp_path)
+    stale = svc._cookie_cache_dir / ".cached_cookies_deadbeef.json"
+    stale.write_text("[]", encoding="utf-8")
+
+    attempts = []
+
+    class FakeInitClient:
+        def __init__(self, *args, **kwargs):
+            self._cookie_source = ""
+            self.cookies = None
+
+        async def init(self, **kwargs):
+            attempts.append(stale.exists())
+            if stale.exists():
+                self._cookie_source = "Cache"
+                raise RuntimeError("Batch execution failed with status code 400")
+            self._cookie_source = "Base Cookies"
+
+    monkeypatch.setattr("app.gemini_service.GeminiClient", FakeInitClient)
+    client = await svc.get_client()
+    assert attempts == [True, False]
+    assert not stale.exists()
+    assert client._cookie_source == "Base Cookies"

@@ -79,7 +79,14 @@ async def _run(path: Path) -> int:
     print(f"models blocked  : {', '.join(blocked) or '(none)'}")
 
     rc = 0
-    if blocked and not usable:
+    is_available_status = str(status) == "1000" or getattr(status, "value", None) == 1000
+    if not is_available_status:
+        print(
+            f"verdict         : NOT AUTHENTICATED (status={status}) - "
+            "cookies are expired, revoked, or guest-only; only default guest tier may respond"
+        )
+        rc = 1
+    elif blocked and not usable:
         print("verdict         : NOT AUTHENTICATED - no models usable")
         rc = 1
     elif blocked:

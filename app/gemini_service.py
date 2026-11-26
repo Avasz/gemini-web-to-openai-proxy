@@ -107,6 +107,25 @@ class GeminiService:
             client._cookies = jar  # noqa: SLF001 - library exposes no public setter
         return client, mode
 
+    async def _init_client(self, client: GeminiClient) -> None:
+        await client.init(
+            timeout=float(self._config.connection_timeout),
+            auto_close=False,
+            auto_refresh=self._auto_refresh,
+            refresh_interval=float(self._config.cookie_refresh_interval),
+            watchdog_timeout=float(self._config.zombie_stream_timeout),
+        )
+
+    def _clear_cookie_cache(self) -> int:
+        removed = 0
+        for path in self._cookie_cache_dir.glob(".cached_cookies_*.json"):
+            try:
+                path.unlink()
+                removed += 1
+            except OSError as exc:
+                logger.warning("Failed to remove stale cookie cache %s: %s", path, exc)
+        return removed
+
     async def get_client(self) -> GeminiClient:
         if self._client is not None:
             return self._client
@@ -115,18 +134,28 @@ class GeminiService:
                 return self._client
             client, mode = self._build_client()
             try:
-                await client.init(
-                    timeout=float(self._config.connection_timeout),
-                    auto_close=False,
-                    auto_refresh=self._auto_refresh,
-                    refresh_interval=float(self._config.cookie_refresh_interval),
-                    watchdog_timeout=float(self._config.zombie_stream_timeout),
-                )
+                await self._init_client(client)
             except Exception as exc:  # noqa: BLE001 - surfaced via health endpoint
-                self._init_error = f"{type(exc).__name__}: {exc}"
-                self._cookie_mode = "error"
-                logger.error("Gemini client init failed: %s", self._init_error)
-                raise
+                source = str(getattr(client, "_cookie_source", "") or "")
+                if source.startswith("Cache") and self._clear_cookie_cache():
+                    logger.warning(
+                        "Gemini client init failed using %s (%s); cleared cookie cache and retrying",
+                        source,
+                        exc,
+                    )
+                    client, mode = self._build_client()
+                    try:
+                        await self._init_client(client)
+                    except Exception as retry_exc:  # noqa: BLE001
+                        self._init_error = f"{type(retry_exc).__name__}: {retry_exc}"
+                        self._cookie_mode = "error"
+                        logger.error("Gemini client init failed: %s", self._init_error)
+                        raise
+                else:
+                    self._init_error = f"{type(exc).__name__}: {exc}"
+                    self._cookie_mode = "error"
+                    logger.error("Gemini client init failed: %s", self._init_error)
+                    raise
             self._client = client
             self._cookie_mode = mode
             self._init_error = None
